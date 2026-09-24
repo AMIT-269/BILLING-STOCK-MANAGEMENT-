@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="120dp"
+    android:height="100dp"
+    android:viewportWidth="120"
+    android:viewportHeight="100">
+
+    <!-- Ambient Glow behind Document -->
+    <path
+        android:pathData="M60,40m-35,0a35,35 0 1,1 70,0a35,35 0 1,1 -70,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="60"
+                android:centerY="40"
+                android:gradientRadius="35"
+                android:type="radial">
+                <item android:offset="0.0" android:color="#35FFD700" />
+                <item android:offset="0.7" android:color="#10D4AF37" />
+                <item android:offset="1.0" android:color="#00000000" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 1. Golden Document / Invoice with Fold in Top-Right -->
+    <path
+        android:pathData="M44,12 L72,12 L84,24 L84,55 L44,55 Z"
+        android:strokeWidth="2.8"
+        android:strokeLineJoin="round"
+        android:fillColor="#0D0A08">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="44"
+                android:startY="12"
+                android:endX="84"
+                android:endY="55"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF2A3" />
+                <item android:offset="0.4" android:color="#FFD700" />
+                <item android:offset="1.0" android:color="#B8860B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Fold Corner on Document -->
+    <path
+        android:pathData="M72,12 L72,24 L84,24"
+        android:strokeWidth="2.2"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="72"
+                android:startY="12"
+                android:endX="84"
+                android:endY="24"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF9D2" />
+                <item android:offset="1.0" android:color="#C69524" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Document Horizontal Text Lines (3 gold bars) -->
+    <path
+        android:pathData="M50,21 L68,21 M50,28 L78,28 M50,35 L78,35"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="50"
+                android:startY="21"
+                android:endX="78"
+                android:endY="35"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF4B8" />
+                <item android:offset="1.0" android:color="#FFD700" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 2. Upward Trend Growth Bar Chart on the Right -->
+    <!-- Bar 1 (Short) -->
+    <path
+        android:pathData="M88,43 L92.5,43 L92.5,56 L88,56 Z"
+        android:fillColor="#E5A91E" />
+    <!-- Bar 2 (Medium) -->
+    <path
+        android:pathData="M94.5,36 L99,36 L99,56 L94.5,56 Z"
+        android:fillColor="#FFC837" />
+    <!-- Bar 3 (Tall) -->
+    <path
+        android:pathData="M101,28 L105.5,28 L105.5,56 L101,56 Z"
+        android:fillColor="#FFE58F" />
+
+    <!-- Trend Arrow Line and Head -->
+    <path
+        android:pathData="M87,40 L102,23"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FFE58F"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M97,21 L105,21 L105,29 Z"
+        android:fillColor="#FFE58F" />
+
+    <!-- 3. Stack of Gold Coins on Left -->
+    <!-- Coin 1 (Bottom) -->
+    <path
+        android:pathData="M26,56 C26,53 35,51.5 45,51.5 C55,51.5 64,53 64,56 L64,61 C64,64 55,65.5 45,65.5 C35,65.5 26,64 26,61 Z"
+        android:fillColor="#B8860B" />
+    <path
+        android:pathData="M26,56 C26,53.5 35,52 45,52 C55,52 64,53.5 64,56 C64,58.5 55,60 45,60 C35,60 26,58.5 26,56 Z"
+        android:fillColor="#FFD700" />
+
+    <!-- Coin 2 -->
+    <path
+        android:pathData="M26,50 C26,47 35,45.5 45,45.5 C55,45.5 64,47 64,50 L64,55 C64,58 55,59.5 45,59.5 C35,59.5 26,58 26,55 Z"
+        android:fillColor="#C69524" />
+    <path
+        android:pathData="M26,50 C26,47.5 35,46 45,46 C55,46 64,47.5 64,50 C64,52.5 55,54 45,54 C35,54 26,52.5 26,50 Z"
+        android:fillColor="#FFE082" />
+
+    <!-- Coin 3 -->
+    <path
+        android:pathData="M26,44 C26,41 35,39.5 45,39.5 C55,39.5 64,41 64,44 L64,49 C64,52 55,53.5 45,53.5 C35,53.5 26,52 26,49 Z"
+        android:fillColor="#B8860B" />
+    <path
+        android:pathData="M26,44 C26,41.5 35,40 45,40 C55,40 64,41.5 64,44 C64,46.5 55,48 45,48 C35,48 26,46.5 26,44 Z"
+        android:fillColor="#FFD54F" />
+
+    <!-- Coin 4 (Top) -->
+    <path
+        android:pathData="M26,38 C26,35 35,33.5 45,33.5 C55,33.5 64,35 64,38 L64,43 C64,46 55,47.5 45,47.5 C35,47.5 26,46 26,43 Z"
+        android:fillColor="#A67808" />
+    <path
+        android:pathData="M26,38 C26,35.5 35,34 45,34 C55,34 64,35.5 64,38 C64,40.5 55,42 45,42 C35,42 26,40.5 26,38 Z"
+        android:fillColor="#FFF6D0" />
+
+    <!-- 4. 3D Gold Bullion Bar (Ingot) Center -->
+    <!-- Top Face (Specular Bright Gold) -->
+    <path
+        android:pathData="M52,43 L76,37 L71,48 L46,54 Z"
+        android:fillColor="#FFF6C2" />
+    <!-- Front Face (Gleaming Gold Ingot) -->
+    <path
+        android:pathData="M46,54 L71,48 L68,67 L42,73 Z"
+        android:fillColor="#F5B014" />
+    <!-- Right Chamfer Face (Warm Gold Shadow) -->
+    <path
+        android:pathData="M71,48 L76,37 L73,56 L68,67 Z"
+        android:fillColor="#B87D09" />
+    <!-- Top Edge Highlight -->
+    <path
+        android:pathData="M46,54 L71,48"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FFFFFF" />
+
+    <!-- 5. 3D Silver Bullion Bar (Ingot) Right -->
+    <!-- Top Face (Platinum Bright Silver) -->
+    <path
+        android:pathData="M77,50 L98,45 L93,56 L72,61 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- Front Face (Polished Metallic Silver) -->
+    <path
+        android:pathData="M72,61 L93,56 L90,75 L69,80 Z"
+        android:fillColor="#CBD5E1" />
+    <!-- Right Chamfer Face (Shadowed Metallic Silver) -->
+    <path
+        android:pathData="M93,56 L98,45 L95,64 L90,75 Z"
+        android:fillColor="#64748B" />
+    <!-- Top Edge Highlight -->
+    <path
+        android:pathData="M72,61 L93,56"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FFFFFF" />
+
+</vector>

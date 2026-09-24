@@ -1,0 +1,6 @@
+{
+  "name": "BILLING & STOCK MANAGEMENT",
+  "description": "Professional Jewellery Shop Billing & Stock Management application with multi-device cloud synchronization, GST/Non-GST invoices, Gold, Silver & Cash accounts, and Bluetooth thermal printing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
