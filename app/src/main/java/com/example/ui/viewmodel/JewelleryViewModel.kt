@@ -163,44 +163,8 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun login(
-        name: String,
         mobile: String,
         gstNumber: String,
-        code: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit = {}
-    ) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            when (val res = repository.login(name, mobile, gstNumber, code)) {
-                is AuthResult.Success -> {
-                    _isLoading.value = false
-                    _userMessage.value = "Welcome ${res.account.jewellerName}"
-                    onSuccess()
-                }
-                is AuthResult.Error -> {
-                    _isLoading.value = false
-                    _userMessage.value = res.message
-                    onError(res.message)
-                }
-            }
-        }
-    }
-
-    fun login(
-        name: String,
-        mobile: String,
-        code: String,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit = {}
-    ) {
-        login(name, mobile, "", code, onSuccess, onError)
-    }
-
-    private val loginMutex = kotlinx.coroutines.sync.Mutex()
-
-    fun loginWithMobileAndCode(
-        mobile: String,
         code: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit = {}
@@ -210,7 +174,7 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
             if (!loginMutex.tryLock()) return@launch
             try {
                 _isLoading.value = true
-                when (val res = repository.loginWithMobileAndCode(mobile, code)) {
+                when (val res = repository.login(mobile, gstNumber, code)) {
                     is AuthResult.Success -> {
                         _isLoading.value = false
                         _userMessage.value = "Welcome ${res.account.jewellerName}"
@@ -228,8 +192,73 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun forgotPassword(
+    fun login(
         name: String,
+        mobile: String,
+        gstNumber: String,
+        code: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit = {}
+    ) {
+        login(mobile, gstNumber, code, onSuccess, onError)
+    }
+
+    private val loginMutex = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun findAccountByMobile(mobile: String): JewellerAccount? {
+        val cleanMob = PhoneUtil.normalizeMobile(mobile)
+        if (cleanMob.length != 10) return null
+        return repository.findAccountEverywhereByMobile(cleanMob)
+    }
+
+    fun loginWithAutoGst(
+        mobile: String,
+        userGst: String,
+        code: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit = {}
+    ) {
+        if (_isLoading.value) return
+        viewModelScope.launch {
+            if (!loginMutex.tryLock()) return@launch
+            try {
+                _isLoading.value = true
+                val cleanMob = PhoneUtil.normalizeMobile(mobile)
+                var targetGst = PhoneUtil.normalizeGst(userGst)
+                if (targetGst.isBlank()) {
+                    val acc = repository.findAccountEverywhereByMobile(cleanMob)
+                    if (acc != null && acc.gstNumber.isNotBlank()) {
+                        targetGst = PhoneUtil.normalizeGst(acc.gstNumber)
+                    }
+                }
+                when (val res = repository.login(cleanMob, targetGst, code)) {
+                    is AuthResult.Success -> {
+                        _isLoading.value = false
+                        _userMessage.value = "Welcome ${res.account.jewellerName}"
+                        onSuccess()
+                    }
+                    is AuthResult.Error -> {
+                        _isLoading.value = false
+                        _userMessage.value = res.message
+                        onError(res.message)
+                    }
+                }
+            } finally {
+                loginMutex.unlock()
+            }
+        }
+    }
+
+    fun loginWithMobileAndCode(
+        mobile: String,
+        code: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit = {}
+    ) {
+        login(mobile, "", code, onSuccess, onError)
+    }
+
+    fun forgotPassword(
         mobile: String,
         gstNumber: String,
         newCode: String,
@@ -239,7 +268,7 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         viewModelScope.launch {
             _isLoading.value = true
-            when (val res = repository.resetPassword(name, mobile, gstNumber, newCode, confirmCode)) {
+            when (val res = repository.resetPassword(mobile, gstNumber, newCode, confirmCode)) {
                 is AuthResult.Success -> {
                     _isLoading.value = false
                     _userMessage.value = "4-Digit Code Updated Successfully!"
@@ -257,12 +286,13 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
     fun forgotPassword(
         name: String,
         mobile: String,
+        gstNumber: String,
         newCode: String,
         confirmCode: String,
         onSuccess: () -> Unit,
         onError: (String) -> Unit = {}
     ) {
-        forgotPassword(name, mobile, "", newCode, confirmCode, onSuccess, onError)
+        forgotPassword(mobile, gstNumber, newCode, confirmCode, onSuccess, onError)
     }
 
     fun changeSecurityCode(

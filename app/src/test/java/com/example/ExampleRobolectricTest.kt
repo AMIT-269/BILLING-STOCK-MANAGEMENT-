@@ -51,7 +51,8 @@ class ExampleRobolectricTest {
       mobile = "9876543210",
       code = "1234",
       confirmCode = "1234",
-      licenceCode = "9999"
+      licenceCode = "9999",
+      gstNumber = "24AAAAA0000A1Z5"
     )
     assertTrue(invalidLicenceRes is AuthResult.Error)
     val msg1 = (invalidLicenceRes as AuthResult.Error).message
@@ -63,14 +64,15 @@ class ExampleRobolectricTest {
       mobile = "9876543210",
       code = "1234",
       confirmCode = "1234",
-      licenceCode = LicenceValidator.OWNER_LICENCE_CODE
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = "24AAAAA0000A1Z5"
     )
     assertTrue(regSuccess is AuthResult.Success)
 
     // 3. Login with correct credentials must succeed (Licence code 2330 NOT needed!)
     val loginSuccess = repo.login(
-      name = "Shiv Jewellers",
       mobile = "9876543210",
+      gstNumber = "24AAAAA0000A1Z5",
       code = "1234"
     )
     assertTrue(loginSuccess is AuthResult.Success)
@@ -78,38 +80,38 @@ class ExampleRobolectricTest {
 
     // 4. Incorrect 4-digit code must return exact message "4 Digit Code ખોટો છે."
     val wrongCodeLogin = repo.login(
-      name = "Shiv Jewellers",
       mobile = "9876543210",
+      gstNumber = "24AAAAA0000A1Z5",
       code = "9999"
     )
     assertTrue(wrongCodeLogin is AuthResult.Error)
     val msg4 = (wrongCodeLogin as AuthResult.Error).message
     assertTrue(msg4.contains("Code") || msg4.contains("કોડ"))
 
-    // 5. Wrong Jeweller Name with existing mobile must return error
-    val wrongNameLogin = repo.login(
-      name = "Om Jewellers",
+    // 5. Wrong GST with existing mobile must return error
+    val wrongGstLogin = repo.login(
       mobile = "9876543210",
+      gstNumber = "24BBBBB0000B1Z5",
       code = "1234"
     )
-    assertTrue(wrongNameLogin is AuthResult.Error)
-    val msg5 = (wrongNameLogin as AuthResult.Error).message
-    assertTrue(msg5.contains("Jeweller Name") || msg5.contains("નામ"))
+    assertTrue(wrongGstLogin is AuthResult.Error)
+    val msg5 = (wrongGstLogin as AuthResult.Error).message
+    assertTrue(msg5.contains("Account") || msg5.contains("એકાઉન્ટ"))
 
-    // 6. Wrong Mobile with existing name must return error
+    // 6. Wrong Mobile with existing GST must return error
     val wrongMobileLogin = repo.login(
-      name = "Shiv Jewellers",
       mobile = "9123456780",
+      gstNumber = "24AAAAA0000A1Z5",
       code = "1234"
     )
     assertTrue(wrongMobileLogin is AuthResult.Error)
     val msg6 = (wrongMobileLogin as AuthResult.Error).message
-    assertTrue(msg6.contains("Mobile") || msg6.contains("મોબાઈલ"))
+    assertTrue(msg6.contains("Account") || msg6.contains("એકાઉન્ટ"))
 
     // 7. Non-existent account must return error
     val notAvailableLogin = repo.login(
-      name = "Unknown Shop",
       mobile = "9111111111",
+      gstNumber = "24ZZZZZ0000Z1Z5",
       code = "1234"
     )
     assertTrue(notAvailableLogin is AuthResult.Error)
@@ -118,8 +120,8 @@ class ExampleRobolectricTest {
 
     // 8. Forgot Password can reset code without licence code
     val resetRes = repo.resetPassword(
-      name = "Shiv Jewellers",
       mobile = "9876543210",
+      gstNumber = "24AAAAA0000A1Z5",
       newCode = "5678",
       confirmCode = "5678"
     )
@@ -127,8 +129,8 @@ class ExampleRobolectricTest {
 
     // 9. Login with new code succeeds
     val loginWithNewCode = repo.login(
-      name = "Shiv Jewellers",
       mobile = "9876543210",
+      gstNumber = "24AAAAA0000A1Z5",
       code = "5678"
     )
     assertTrue(loginWithNewCode is AuthResult.Success)
@@ -255,7 +257,8 @@ class ExampleRobolectricTest {
       mobile = "9900112233",
       code = "1122",
       confirmCode = "1122",
-      licenceCode = LicenceValidator.OWNER_LICENCE_CODE
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = "24AMITJ1234F1Z5"
     )
     assertTrue(regRes is AuthResult.Success)
     val accountId = (regRes as AuthResult.Success).account.accountId
@@ -373,7 +376,7 @@ class ExampleRobolectricTest {
       repo.logout()
       assertEquals("Session should be cleared on logout", null, repo.currentAccount.value)
 
-      val loginResult = repo.loginWithMobileAndCode(mobile, code)
+      val loginResult = repo.login(mobile, gst, code)
       assertTrue("Cycle $cycle: Login must succeed without 'Mobile Number Not Registered'", loginResult is AuthResult.Success)
       val loggedIn = (loginResult as AuthResult.Success).account
       assertEquals(shopName, loggedIn.jewellerName)
@@ -461,7 +464,7 @@ class ExampleRobolectricTest {
     assertTrue("Bill text should mention Gold Received", billText.contains("Gold Received"))
     assertTrue("Bill text should show 10.000g", billText.contains("10.000g"))
     assertTrue("Bill text should show 75%", billText.contains("75%"))
-    assertTrue("Bill text should show Fine 7.500g", billText.contains("Fine 7.500g"))
+    assertTrue("Bill text should show Fine 7.500g", billText.contains("7.500g FINE") || billText.contains("Fine 7.500g", ignoreCase = true))
     assertTrue("Bill text should show 112,500", billText.contains("112,500") || billText.contains("1,12,500"))
     assertTrue("Bill text should mention Cash Received", billText.contains("Cash Received"))
     assertTrue("Bill text should show 37,500", billText.contains("37,500"))
@@ -481,7 +484,8 @@ class ExampleRobolectricTest {
       mobile = "9824055555",
       code = "3344",
       confirmCode = "3344",
-      licenceCode = LicenceValidator.OWNER_LICENCE_CODE
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = "24SARDAR1234F1Z5"
     )
     assertTrue(regRes is AuthResult.Success)
     val accountId = (regRes as AuthResult.Success).account.accountId

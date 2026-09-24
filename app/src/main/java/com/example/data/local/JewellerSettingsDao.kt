@@ -21,6 +21,9 @@ interface JewellerSettingsDao {
     @Query("SELECT * FROM jeweller_settings WHERE UPPER(TRIM(gstNumber)) = UPPER(TRIM(:gst)) LIMIT 1")
     suspend fun findSettingsByGst(gst: String): JewellerSettings?
 
+    @Query("UPDATE jeweller_settings SET accountId = :targetAccountId WHERE accountId IS NULL OR accountId = '' OR accountId NOT IN (SELECT accountId FROM jeweller_accounts)")
+    suspend fun adoptOrphanSettings(targetAccountId: String)
+
     @Query("DELETE FROM jeweller_settings WHERE accountId = :accountId")
     suspend fun deleteSettingsByAccountId(accountId: String)
 }

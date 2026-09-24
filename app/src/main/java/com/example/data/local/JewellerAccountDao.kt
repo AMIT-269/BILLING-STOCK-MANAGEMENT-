@@ -32,6 +32,9 @@ interface JewellerAccountDao {
     @Query("SELECT * FROM jeweller_accounts WHERE UPPER(TRIM(gstNumber)) = UPPER(TRIM(:gst)) LIMIT 1")
     suspend fun findAccountByGst(gst: String): JewellerAccount?
 
+    @Query("SELECT * FROM jeweller_accounts WHERE TRIM(mobileNumber) = TRIM(:mobile) AND UPPER(TRIM(gstNumber)) = UPPER(TRIM(:gst)) LIMIT 1")
+    suspend fun findAccountByMobileAndGst(mobile: String, gst: String): JewellerAccount?
+
     @Query("SELECT * FROM jeweller_accounts")
     suspend fun getAllAccounts(): List<JewellerAccount>
 

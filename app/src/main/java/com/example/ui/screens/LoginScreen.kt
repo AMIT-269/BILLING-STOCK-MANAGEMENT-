@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -22,7 +23,6 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.locale.AppStrings
 import com.example.ui.locale.loc
 import com.example.ui.theme.GoldDark
-import com.example.ui.theme.GoldPrimary
 import com.example.ui.viewmodel.JewelleryViewModel
 import com.example.util.PhoneUtil
 
@@ -34,20 +34,50 @@ fun LoginScreen(
     onNavigateToForgotPassword: () -> Unit
 ) {
     val lastCreds = remember { viewModel.getLastCredentialsTriple() }
-    var mobileNumber by remember { mutableStateOf(PhoneUtil.normalizePhone(lastCreds.second)) }
+    var mobileNumber by remember { mutableStateOf(PhoneUtil.normalizeMobile(lastCreds.second)) }
+    var gstNumber by remember { mutableStateOf(PhoneUtil.normalizeGst(lastCreds.third)) }
     var code4Digit by remember { mutableStateOf("") }
-    var confirmCode4Digit by remember { mutableStateOf("") }
     var codeVisible by remember { mutableStateOf(false) }
-    var confirmCodeVisible by remember { mutableStateOf(false) }
+    var knownAccountName by remember { mutableStateOf<String?>(null) }
 
-    // If initial lastCreds was empty, refresh from triple once on launch
+    // Refresh credentials on launch / resume and check if account exists
     LaunchedEffect(Unit) {
-        if (mobileNumber.isBlank()) {
-            val creds = viewModel.getLastCredentialsTriple()
-            val clean = PhoneUtil.normalizePhone(creds.second)
-            if (clean.isNotBlank()) {
-                mobileNumber = clean
+        val creds = viewModel.getLastCredentialsTriple()
+        val cleanMob = PhoneUtil.normalizeMobile(creds.second)
+        val cleanGst = PhoneUtil.normalizeGst(creds.third)
+        if (mobileNumber.isBlank() && cleanMob.isNotBlank()) {
+            mobileNumber = cleanMob
+        }
+        if (gstNumber.isBlank() && cleanGst.isNotBlank()) {
+            gstNumber = cleanGst
+        }
+        val targetMob = if (mobileNumber.isNotBlank()) mobileNumber else cleanMob
+        if (targetMob.length == 10) {
+            val acc = viewModel.findAccountByMobile(targetMob)
+            if (acc != null) {
+                knownAccountName = acc.jewellerName
+                if (gstNumber.isBlank() && acc.gstNumber.isNotBlank()) {
+                    gstNumber = PhoneUtil.normalizeGst(acc.gstNumber)
+                }
             }
+        }
+    }
+
+    // Dynamic account detection when user enters 10-digit mobile number
+    LaunchedEffect(mobileNumber) {
+        val clean = PhoneUtil.normalizeMobile(mobileNumber)
+        if (clean.length == 10) {
+            val acc = viewModel.findAccountByMobile(clean)
+            if (acc != null) {
+                knownAccountName = acc.jewellerName
+                if (gstNumber.isBlank() && acc.gstNumber.isNotBlank()) {
+                    gstNumber = PhoneUtil.normalizeGst(acc.gstNumber)
+                }
+            } else {
+                knownAccountName = null
+            }
+        } else {
+            knownAccountName = null
         }
     }
 
@@ -68,7 +98,7 @@ fun LoginScreen(
         ) {
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Logo Icon matching new App Icon
+            // Logo Icon matching App Icon
             Surface(
                 shape = RoundedCornerShape(18.dp),
                 color = Color(0xFF0F0F14),
@@ -112,7 +142,7 @@ fun LoginScreen(
                 Column(
                     modifier = Modifier.padding(20.dp)
                 ) {
-                    // Mobile Number — REQUIRED
+                    // 1. Mobile Number (Exact 10 digits, no +91)
                     OutlinedTextField(
                         value = mobileNumber,
                         onValueChange = { input ->
@@ -131,9 +161,55 @@ fun LoginScreen(
                         singleLine = true
                     )
 
+                    if (knownAccountName != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(start = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = com.example.ui.theme.CashGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "${loc("Account:", "એકાઉન્ટ:")} $knownAccountName",
+                                color = com.example.ui.theme.CashGreen,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 4 Digit Code — REQUIRED
+                    // 2. GST No.
+                    OutlinedTextField(
+                        value = gstNumber,
+                        onValueChange = { input ->
+                            gstNumber = PhoneUtil.normalizeGst(input)
+                            errorMessage = null
+                        },
+                        label = { Text(loc(en = "GST No. *", gu = "જીએસટી નંબર *")) },
+                        placeholder = { Text(loc("Enter GST Number", "GST નંબર દાખલ કરો")) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Badge, contentDescription = null, tint = GoldDark)
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.Characters
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("login_gst_number"),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 3. 4 Digit Code (with Eye icon to show/hide)
                     OutlinedTextField(
                         value = code4Digit,
                         onValueChange = { input ->
@@ -162,38 +238,7 @@ fun LoginScreen(
                         singleLine = true
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // CONFORM CODE (4 digit) — REQUIRED
-                    OutlinedTextField(
-                        value = confirmCode4Digit,
-                        onValueChange = { input ->
-                            confirmCode4Digit = PhoneUtil.sanitizeCodeInput(input)
-                            errorMessage = null
-                        },
-                        label = { Text("${loc(en = "CONFORM CODE (4-digit)", gu = "કન્ફર્મ કોડ (૪ અંક)")} *") },
-                        placeholder = { Text(loc("Re-enter 4-digit code", "૪-અંકનો કોડ ફરીથી દાખલ કરો")) },
-                        leadingIcon = {
-                            Icon(Icons.Default.LockOpen, contentDescription = null, tint = GoldDark)
-                        },
-                        trailingIcon = {
-                            IconButton(onClick = { confirmCodeVisible = !confirmCodeVisible }) {
-                                Icon(
-                                    imageVector = if (confirmCodeVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = if (confirmCodeVisible) "Hide code" else "Show code",
-                                    tint = GoldDark
-                                )
-                            }
-                        },
-                        visualTransformation = if (confirmCodeVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("login_confirm_code"),
-                        singleLine = true
-                    )
-
-                    // Visible Forgot Password link
+                    // 4. Forgot Password Link
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -225,26 +270,27 @@ fun LoginScreen(
 
                     Button(
                         onClick = {
-                            if (mobileNumber.trim().isEmpty()) {
-                                errorMessage = loc("Please enter Mobile Number", "મોબાઈલ નંબર દાખલ કરો")
+                            val cleanMob = PhoneUtil.normalizeMobile(mobileNumber)
+                            val cleanGst = PhoneUtil.normalizeGst(gstNumber)
+                            val cleanCode = PhoneUtil.normalizeCode(code4Digit)
+
+                            if (cleanMob.length != 10) {
+                                errorMessage = loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")
                                 return@Button
                             }
-                            if (code4Digit.length != 4) {
-                                errorMessage = loc("Please enter 4-digit code", "૪ અંકનો કોડ દાખલ કરો")
+                            if (cleanGst.isEmpty()) {
+                                errorMessage = loc("Please enter GST Number.", "કૃપા કરીને જીએસટી નંબર દાખલ કરો.")
                                 return@Button
                             }
-                            if (confirmCode4Digit.length != 4) {
-                                errorMessage = loc("Please enter conform code", "કન્ફર્મ કોડ દાખલ કરો")
-                                return@Button
-                            }
-                            if (code4Digit != confirmCode4Digit) {
-                                errorMessage = loc("Codes do not match", "કોડ મેળ ખાતો નથી. બંને કોડ સમાન હોવા જોઈએ.")
+                            if (cleanCode.length != 4) {
+                                errorMessage = loc("Please enter 4-digit code.", "૪ અંકનો કોડ દાખલ કરો.")
                                 return@Button
                             }
 
-                            viewModel.loginWithMobileAndCode(
-                                mobile = mobileNumber.trim(),
-                                code = code4Digit.trim(),
+                            viewModel.login(
+                                mobile = cleanMob,
+                                gstNumber = cleanGst,
+                                code = cleanCode,
                                 onSuccess = onLoginSuccess,
                                 onError = { err ->
                                     errorMessage = err

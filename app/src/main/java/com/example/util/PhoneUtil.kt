@@ -31,7 +31,7 @@ object PhoneUtil {
      */
     fun normalizePhone(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
-        val ascii = convertIndicToAscii(raw)
+        val ascii = convertIndicToAscii(raw.trim())
         val digits = ascii.filter { it in '0'..'9' }
         return when {
             digits.length == 10 -> digits
@@ -41,6 +41,40 @@ object PhoneUtil {
             digits.length > 10 -> digits.takeLast(10)
             else -> digits
         }
+    }
+
+    /**
+     * Strict 10-digit normalized mobile number alias
+     */
+    fun normalizeMobile(raw: String?): String {
+        return normalizePhone(raw)
+    }
+
+    /**
+     * Normalizes GST Number:
+     * - Converts any Indic numerals to ASCII
+     * - Trims and converts to uppercase
+     * - Strips all spaces, dashes, and non-alphanumeric characters
+     */
+    fun normalizeGst(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val ascii = convertIndicToAscii(raw)
+        return ascii.uppercase().filter { it.isLetterOrDigit() }
+    }
+
+    /**
+     * Validates whether a mobile number is exactly 10 digits
+     */
+    fun isValidMobile(raw: String?): Boolean {
+        return normalizeMobile(raw).length == 10
+    }
+
+    /**
+     * Normalizes general text: trims whitespace and collapses multiple spaces
+     */
+    fun normalizeText(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        return raw.trim().replace(Regex("\\s+"), " ")
     }
 
     /**

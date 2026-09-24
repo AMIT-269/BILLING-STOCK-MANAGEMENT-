@@ -148,6 +148,7 @@ class JewelleryRepository(private val context: Context) {
 
     suspend fun saveAccountPermanently(account: JewellerAccount) {
         val cleanMob = PhoneUtil.normalizePhone(account.mobileNumber)
+        val cleanGst = PhoneUtil.normalizeGst(account.gstNumber)
         if (cleanMob.isNotEmpty()) {
             accountMemoryCache[cleanMob] = account
         }
@@ -177,10 +178,15 @@ class JewelleryRepository(private val context: Context) {
                 editor.putString("account_$cleanMob", accountJson)
                 editor.putString("code_$cleanMob", account.code4Digit)
             }
+            if (cleanGst.isNotEmpty()) {
+                editor.putString("account_gst_$cleanGst", accountJson)
+                editor.putString("code_gst_$cleanGst", account.code4Digit)
+            }
             editor.putString("last_registered_account", accountJson)
             editor.putString("last_registered_mobile", account.mobileNumber)
             editor.putString("last_registered_name", account.jewellerName)
             editor.putString("last_registered_gst", account.gstNumber)
+            editor.putString("last_registered_code", account.code4Digit)
 
             val existing = getPermanentAccountsList().toMutableList()
             val idx = existing.indexOfFirst { it.accountId == account.accountId || PhoneUtil.normalizePhone(it.mobileNumber) == cleanMob }
@@ -224,6 +230,7 @@ class JewelleryRepository(private val context: Context) {
                 .putString("last_jeweller_name", account.jewellerName)
                 .putString("last_mobile_number", account.mobileNumber)
                 .putString("last_gst_number", account.gstNumber)
+                .putString("last_code4digit", account.code4Digit)
                 .commit()
         } catch (_: Exception) {}
     }
@@ -233,8 +240,15 @@ class JewelleryRepository(private val context: Context) {
             val list = mutableListOf<JewellerAccount>()
             // From Room
             try { list.addAll(accountDao.getAllAccounts()) } catch (_: Exception) {}
-            // From permanentPrefs
+            // From permanentPrefs registered list
             list.addAll(getPermanentAccountsList())
+            // From permanentPrefs direct keys
+            for ((key, value) in permanentPrefs.all) {
+                if (key.startsWith("account_") && value is String) {
+                    parseSingleAccountJson(value)?.let { list.add(it) }
+                }
+            }
+            parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))?.let { list.add(it) }
             // From cloudSync mirror
             list.addAll(cloudSync.getLocalMirroredAccounts())
             // From vault files
@@ -251,10 +265,104 @@ class JewelleryRepository(private val context: Context) {
             for (acc in list) {
                 val clean = PhoneUtil.normalizePhone(acc.mobileNumber)
                 if (clean.isNotEmpty()) {
-                    accountMemoryCache[clean] = acc
+                    val existing = accountMemoryCache[clean]
+                    if (existing == null || acc.createdAt >= existing.createdAt) {
+                        accountMemoryCache[clean] = acc
+                        try { accountDao.insertAccount(acc) } catch (_: Exception) {}
+                    }
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    suspend fun getAllCandidateAccounts(targetMobile: String = "", targetGst: String = ""): List<JewellerAccount> = withContext(Dispatchers.IO) {
+        loadAllKnownAccounts()
+        val list = mutableListOf<JewellerAccount>()
+
+        // 1. In-memory cache
+        list.addAll(accountMemoryCache.values)
+
+        // 2. Room DB
+        try { list.addAll(accountDao.getAllAccounts()) } catch (_: Exception) {}
+        if (targetMobile.isNotBlank()) {
+            try { accountDao.findAccountByMobile(targetMobile)?.let { list.add(it) } } catch (_: Exception) {}
+        }
+        if (targetGst.isNotBlank()) {
+            try { accountDao.findAccountByGst(targetGst)?.let { list.add(it) } } catch (_: Exception) {}
+        }
+        if (targetMobile.isNotBlank() && targetGst.isNotBlank()) {
+            try { accountDao.findAccountByMobileAndGst(targetMobile, targetGst)?.let { list.add(it) } } catch (_: Exception) {}
+        }
+
+        // 3. Permanent SharedPreferences
+        if (targetMobile.isNotBlank()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_$targetMobile", null))?.let { list.add(it) }
+        }
+        if (targetGst.isNotBlank()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_gst_$targetGst", null))?.let { list.add(it) }
+        }
+        parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))?.let { list.add(it) }
+        list.addAll(getPermanentAccountsList())
+
+        for ((key, value) in permanentPrefs.all) {
+            if (key.startsWith("account_") && value is String) {
+                parseSingleAccountJson(value)?.let { list.add(it) }
+            }
+        }
+
+        // 4. Disk Vault files
+        val vaultFiles = listOf(
+            File(context.filesDir, "jeweller_accounts_vault.json"),
+            File(context.cacheDir, "jeweller_accounts_vault.json"),
+            context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
+        )
+        for (f in vaultFiles) {
+            if (f != null && f.exists()) {
+                try { list.addAll(parseAccountsArrayJson(f.readText())) } catch (_: Exception) {}
+            }
+        }
+
+        // 5. CloudSync local persistent mirror
+        list.addAll(cloudSync.getLocalMirroredAccounts())
+
+        // Check if any candidate account already matches targetMobile or targetGst locally
+        val cleanTargetMob = PhoneUtil.normalizeMobile(targetMobile)
+        val cleanTargetGst = PhoneUtil.normalizeGst(targetGst)
+        val hasLocalMatch = list.any { acc ->
+            val accMob = PhoneUtil.normalizeMobile(acc.mobileNumber)
+            val accGst = PhoneUtil.normalizeGst(acc.gstNumber)
+            (cleanTargetMob.isNotEmpty() && accMob == cleanTargetMob) ||
+            (cleanTargetGst.isNotEmpty() && accGst == cleanTargetGst)
+        }
+
+        // 6. Only if NO local match exists and network is available, query Cloud Firestore with short timeout
+        if (!hasLocalMatch && cloudSync.isNetworkAvailable()) {
+            if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
+                try {
+                    val cloudRes = cloudSync.findAccountByMobileAndGstInCloud(cleanTargetMob, cleanTargetGst)
+                    if (cloudRes is CloudSyncManager.CloudLookupResult.Found) {
+                        list.add(cloudRes.account)
+                    }
+                } catch (_: Exception) {}
+            } else if (cleanTargetMob.isNotEmpty()) {
+                try { cloudSync.findAccountByMobileInCloud(cleanTargetMob)?.let { list.add(it) } } catch (_: Exception) {}
+            } else if (cleanTargetGst.isNotEmpty()) {
+                try { cloudSync.findAccountByGstInCloud(cleanTargetGst)?.let { list.add(it) } } catch (_: Exception) {}
+            }
+        }
+
+        // Deduplicate by 10-digit mobile number, newest created first
+        val distinctByMobile = list.sortedByDescending { it.createdAt }
+            .distinctBy { PhoneUtil.normalizeMobile(it.mobileNumber) }
+
+        // If a specific mobile is targeted, ensure it's prioritized at the top
+        val prioritized = if (cleanTargetMob.isNotEmpty()) {
+            distinctByMobile.sortedByDescending { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanTargetMob }
+        } else {
+            distinctByMobile
+        }
+
+        return@withContext prioritized
     }
 
     suspend fun findAccountEverywhereByMobile(mobile: String): JewellerAccount? = withContext(Dispatchers.IO) {
@@ -371,20 +479,43 @@ class JewelleryRepository(private val context: Context) {
         return@withContext null
     }
 
+    suspend fun adoptOrphanData(accountId: String) = withContext(Dispatchers.IO) {
+        try {
+            val orphanTxCount = stockDao.getOrphanTransactionCount()
+            if (orphanTxCount > 0) {
+                stockDao.adoptOrphanTransactions(accountId)
+                Log.d("JewelleryRepository", "Adopted $orphanTxCount orphan stock transactions to account $accountId")
+            }
+
+            val orphanBillCount = billDao.getOrphanBillCount()
+            if (orphanBillCount > 0) {
+                billDao.adoptOrphanBills(accountId)
+                Log.d("JewelleryRepository", "Adopted $orphanBillCount orphan bills to account $accountId")
+            }
+
+            val currentSettings = settingsDao.getSettingsDirect(accountId)
+            if (currentSettings == null) {
+                settingsDao.adoptOrphanSettings(accountId)
+            }
+        } catch (e: Exception) {
+            Log.w("JewelleryRepository", "adoptOrphanData error: ${e.message}")
+        }
+    }
+
     suspend fun initializeSession() = withContext(Dispatchers.IO) {
         loadAllKnownAccounts()
 
         val savedAccountId = sessionPrefs.getString("logged_in_account_id", null)
-        if (savedAccountId.isNullOrBlank()) {
-            // User is explicitly logged out
-            _currentAccount.value = null
-            return@withContext
-        }
+        var account: JewellerAccount? = null
 
-        var account: JewellerAccount? = accountDao.getAccountById(savedAccountId)
+        if (!savedAccountId.isNullOrBlank()) {
+            account = accountDao.getAccountById(savedAccountId)
+        }
 
         if (account == null) {
             val savedMobile = sessionPrefs.getString("logged_in_mobile", null)
+                ?: sessionPrefs.getString("last_mobile_number", null)
+                ?: permanentPrefs.getString("last_registered_mobile", null)
             if (!savedMobile.isNullOrBlank()) {
                 account = findAccountEverywhereByMobile(savedMobile)
             }
@@ -392,14 +523,26 @@ class JewelleryRepository(private val context: Context) {
 
         if (account == null) {
             val savedName = sessionPrefs.getString("logged_in_name", null)
+                ?: sessionPrefs.getString("last_jeweller_name", null)
+                ?: permanentPrefs.getString("last_registered_name", null)
             val savedMobile = sessionPrefs.getString("logged_in_mobile", null)
+                ?: sessionPrefs.getString("last_mobile_number", null)
+                ?: permanentPrefs.getString("last_registered_mobile", null)
             if (!savedMobile.isNullOrBlank() || !savedName.isNullOrBlank()) {
                 account = cloudSync.findAccountInCloud(savedName ?: "", savedMobile ?: "")
             }
         }
 
+        // Auto-recover account on single-shop device if session was cleared
+        if (account == null) {
+            val allLocal = try { accountDao.getAllAccounts() } catch (_: Exception) { emptyList() }
+            val permAccounts = getPermanentAccountsList() + accountMemoryCache.values
+            account = (allLocal + permAccounts).firstOrNull()
+        }
+
         if (account != null) {
             saveAccountPermanently(account)
+            adoptOrphanData(account.accountId)
             _currentAccount.value = account
             sessionPrefs.edit()
                 .putString("logged_in_account_id", account.accountId)
@@ -421,18 +564,19 @@ class JewelleryRepository(private val context: Context) {
         code: String,
         confirmCode: String,
         licenceCode: String,
-        gstNumber: String = ""
+        gstNumber: String
     ): AuthResult = withContext(Dispatchers.IO) {
         val cleanName = normalizeText(name)
-        val cleanMobile = normalizePhone(mobile)
-        val cleanCode = code.trim()
-        val cleanConfirm = confirmCode.trim()
+        val cleanMobile = PhoneUtil.normalizeMobile(mobile)
+        val cleanGst = PhoneUtil.normalizeGst(gstNumber)
+        val cleanCode = PhoneUtil.normalizeCode(code)
+        val cleanConfirm = PhoneUtil.normalizeCode(confirmCode)
         val cleanLicence = licenceCode.trim()
-        val cleanGst = gstNumber.trim().uppercase()
 
         if (cleanName.isEmpty()) return@withContext AuthResult.Error(loc("Please enter Jeweller/Shop Name.", "કૃપા કરીને ઝવેરી/દુકાનનું નામ દાખલ કરો."))
         if (cleanMobile.length != 10) return@withContext AuthResult.Error(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો."))
-        if (cleanCode.length != 4 || !cleanCode.all { it.isDigit() }) return@withContext AuthResult.Error(loc("Please enter a 4-digit code.", "4 અંકનો કોડ દાખલ કરો."))
+        if (cleanGst.isEmpty()) return@withContext AuthResult.Error(loc("GST Number is mandatory.", "જીએસટી નંબર આવશ્યક છે."))
+        if (cleanCode.length != 4) return@withContext AuthResult.Error(loc("Please enter a 4-digit code.", "4 અંકનો કોડ દાખલ કરો."))
         if (cleanCode != cleanConfirm) return@withContext AuthResult.Error(loc("Codes do not match. Both codes must be identical.", "કોડ મેળ ખાતો નથી. બંને કોડ સમાન હોવા જોઈએ."))
         if (cleanLicence.isEmpty()) return@withContext AuthResult.Error(loc("Licence code is required.", "લાઇસન્સ કોડ આવશ્યક છે."))
 
@@ -441,336 +585,267 @@ class JewelleryRepository(private val context: Context) {
             return@withContext AuthResult.Error(loc("Invalid Licence Code", "ખોટો લાઇસન્સ કોડ"))
         }
 
-        // 1. Check if account already exists locally or in cloud
+        // Check if account already exists locally or in cloud
         val localAccounts = try { accountDao.getAllAccounts() } catch (e: Exception) { emptyList() }
+        val permAccounts = getPermanentAccountsList() + accountMemoryCache.values
         val cloudAccounts = cloudSync.getAllAccountsFromCloud()
-        val allAccounts = (localAccounts + cloudAccounts).distinctBy { it.accountId }
+        val allAccounts = (localAccounts + permAccounts + cloudAccounts)
 
-        // 2. Strict GST Number Validation:
-        // If this GST number is ALREADY registered:
-        // - If jeweller name or mobile number is changed/different: STRICTLY BLOCK REGISTRATION.
-        //   Show: "GST NO already registered"
-        // - If jeweller name, mobile number, and GST number are ALL SAME (multi-phone usage for the same registered account):
-        //   If 4-digit code matches, activate / sync this account on this device.
-        //   If 4-digit code does not match, prompt to enter correct code or login.
-        if (cleanGst.isNotEmpty()) {
-            val existingByGst = allAccounts.firstOrNull { acc ->
-                val accGst = acc.gstNumber.trim().uppercase().ifEmpty {
-                    try { settingsDao.getSettingsDirect(acc.accountId)?.gstNumber?.trim()?.uppercase() ?: "" } catch (_: Exception) { "" }
-                }
-                accGst.isNotEmpty() && accGst == cleanGst
-            } ?: cloudSync.findAccountByGstInCloud(cleanGst)
-              ?: try { accountDao.findAccountByGst(cleanGst) } catch (_: Exception) { null }
+        // Find existing account ONLY by this exact mobile number
+        val existingAccount = allAccounts.firstOrNull {
+            PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile
+        } ?: cloudSync.findAccountByMobileInCloud(cleanMobile)
 
-            if (existingByGst != null) {
-                val isSameMobile = normalizePhone(existingByGst.mobileNumber) == cleanMobile
-                val isSameName = normalizeText(existingByGst.jewellerName).equals(normalizeText(cleanName), ignoreCase = true)
+        // Reuse existing accountId if re-registering same mobile, otherwise unique ID
+        val cleanGstSafe = cleanGst.filter { it.isLetterOrDigit() }.take(15)
+        val targetAccountId = existingAccount?.accountId ?: "jwl_${cleanMobile}_${cleanGstSafe.ifEmpty { "reg" }}"
 
-                // If mobile or jeweller name is different, strictly forbid duplicate registration under same GST!
-                if (!isSameMobile || !isSameName) {
-                    return@withContext AuthResult.Error(
-                        loc(
-                            en = "GST NO already registered: This GST Number is already registered with another Jeweller / Mobile Number.",
-                            gu = "GST NO already registered: આ જીએસટી નંબર અન્ય ઝવેરી અથવા મોબાઈલ નંબર સાથે પહેલેથી જ રજીસ્ટર થયેલો છે. કૃપા કરીને સાચો GST નંબર દાખલ કરો અથવા લોગિન કરો."
-                        )
-                    )
-                }
-
-                // Jeweller Name, Mobile Number, and GST Number are ALL IDENTICAL (multi-phone / re-install scenario):
-                if (cleanCode != existingByGst.code4Digit) {
-                    return@withContext AuthResult.Error(
-                        loc(
-                            en = "This GST NO and account are already registered. Please enter your correct 4-digit code to activate this phone, or go to Login.",
-                            gu = "આ GST NO અને એકાઉન્ટ પહેલેથી જ રજીસ્ટર થયેલા છે. આ ફોન સક્રિય કરવા માટે તમારો સાચો 4 અંકનો કોડ દાખલ કરો અથવા લોગિન કરો."
-                        )
-                    )
-                }
-
-                // Legitimate multi-phone usage: activate registered account on this device
-                saveAccountPermanently(existingByGst)
-
-                sessionPrefs.edit()
-                    .putString("logged_in_account_id", existingByGst.accountId)
-                    .putString("logged_in_name", existingByGst.jewellerName)
-                    .putString("logged_in_mobile", existingByGst.mobileNumber)
-                    .putString("logged_in_gst", existingByGst.gstNumber)
-                    .putString("last_jeweller_name", existingByGst.jewellerName)
-                    .putString("last_mobile_number", existingByGst.mobileNumber)
-                    .putString("last_gst_number", existingByGst.gstNumber)
-                    .commit()
-
-                _currentAccount.value = existingByGst
-
-                // Start periodic auto-sync and realtime cloud sync on this phone
-                cloudSync.startPeriodicAutoSync(existingByGst.accountId)
-
-                return@withContext AuthResult.Success(existingByGst)
-            }
-        }
-
-        // 3. Mobile Number Validation:
-        val existingByMobile = allAccounts.firstOrNull { normalizePhone(it.mobileNumber) == cleanMobile }
-            ?: findAccountEverywhereByMobile(cleanMobile)
-
-        if (existingByMobile != null) {
-            val isSameName = normalizeText(existingByMobile.jewellerName).equals(normalizeText(cleanName), ignoreCase = true)
-            val existingGst = existingByMobile.gstNumber.trim().uppercase()
-
-            if (isSameName && (existingGst.isEmpty() || existingGst == cleanGst) && cleanCode == existingByMobile.code4Digit) {
-                // Multi-phone with same mobile, name, matching code
-                saveAccountPermanently(existingByMobile)
-
-                sessionPrefs.edit()
-                    .putString("logged_in_account_id", existingByMobile.accountId)
-                    .putString("logged_in_name", existingByMobile.jewellerName)
-                    .putString("logged_in_mobile", existingByMobile.mobileNumber)
-                    .putString("logged_in_gst", existingByMobile.gstNumber)
-                    .putString("last_jeweller_name", existingByMobile.jewellerName)
-                    .putString("last_mobile_number", existingByMobile.mobileNumber)
-                    .putString("last_gst_number", existingByMobile.gstNumber)
-                    .commit()
-
-                _currentAccount.value = existingByMobile
-                cloudSync.startPeriodicAutoSync(existingByMobile.accountId)
-                return@withContext AuthResult.Success(existingByMobile)
-            }
-
-            return@withContext AuthResult.Error(
-                loc(
-                    en = "This mobile number is already registered. Please login.",
-                    gu = "આ મોબાઈલ નંબર પહેલેથી જ રજીસ્ટર થયેલો છે. કૃપા કરીને લોગિન કરો."
-                )
-            )
-        }
-
-        val accountId = if (cleanGst.isNotEmpty()) "jwl_${cleanMobile}_${cleanGst.filter { it.isLetterOrDigit() }.take(15)}" else "jwl_${cleanMobile}_main"
-        val newAccount = JewellerAccount(
-            accountId = accountId,
+        val finalAccount = JewellerAccount(
+            accountId = targetAccountId,
             jewellerName = cleanName,
             mobileNumber = cleanMobile,
             code4Digit = cleanCode,
             gstNumber = cleanGst,
             isLicensed = true,
             status = "ACTIVE",
-            createdAt = System.currentTimeMillis()
+            createdAt = existingAccount?.createdAt ?: System.currentTimeMillis()
         )
 
         try {
-            // Save everywhere permanently
-            saveAccountPermanently(newAccount)
+            saveAccountPermanently(finalAccount)
 
-            // Create initial Jeweller Settings
-            val initialSettings = JewellerSettings(
-                accountId = accountId,
-                jewellerName = cleanName,
-                contactNumber = cleanMobile,
-                address = "",
-                gstNumber = cleanGst,
-                goldRate22k = 0.0,
-                silverRate = 0.0,
-                updatedAt = System.currentTimeMillis()
-            )
-            try { settingsDao.insertOrUpdate(initialSettings) } catch (_: Exception) {}
+            var settings = settingsDao.getSettingsDirect(targetAccountId)
+            if (settings == null) {
+                settings = JewellerSettings(
+                    accountId = targetAccountId,
+                    jewellerName = cleanName,
+                    contactNumber = cleanMobile,
+                    address = "",
+                    gstNumber = cleanGst,
+                    goldRate22k = 0.0,
+                    silverRate = 0.0,
+                    updatedAt = System.currentTimeMillis()
+                )
+                try { settingsDao.insertOrUpdate(settings) } catch (_: Exception) {}
+            } else {
+                settings = settings.copy(
+                    jewellerName = cleanName,
+                    contactNumber = cleanMobile,
+                    gstNumber = cleanGst,
+                    updatedAt = System.currentTimeMillis()
+                )
+                try { settingsDao.insertOrUpdate(settings) } catch (_: Exception) {}
+            }
 
-            // Sync to cloud and persistent multi-file mirror
-            try { cloudSync.registerAccountToCloud(newAccount) } catch (_: Exception) {}
-            try { cloudSync.syncSettingsToCloud(initialSettings) } catch (_: Exception) {}
+            try { cloudSync.registerAccountToCloud(finalAccount) } catch (_: Exception) {}
+            try { cloudSync.syncSettingsToCloud(settings) } catch (_: Exception) {}
 
-            // Persist session and remember last credentials immediately
+            adoptOrphanData(targetAccountId)
+
+            try { cloudSync.restoreFullAccountFromCloud(targetAccountId) } catch (_: Exception) {}
+
             sessionPrefs.edit()
-                .putString("logged_in_account_id", newAccount.accountId)
-                .putString("logged_in_name", newAccount.jewellerName)
-                .putString("logged_in_mobile", newAccount.mobileNumber)
-                .putString("logged_in_gst", newAccount.gstNumber)
-                .putString("last_jeweller_name", newAccount.jewellerName)
-                .putString("last_mobile_number", newAccount.mobileNumber)
-                .putString("last_gst_number", newAccount.gstNumber)
+                .putString("logged_in_account_id", finalAccount.accountId)
+                .putString("logged_in_name", finalAccount.jewellerName)
+                .putString("logged_in_mobile", finalAccount.mobileNumber)
+                .putString("logged_in_gst", finalAccount.gstNumber)
+                .putString("last_jeweller_name", finalAccount.jewellerName)
+                .putString("last_mobile_number", finalAccount.mobileNumber)
+                .putString("last_gst_number", finalAccount.gstNumber)
                 .commit()
 
-            _currentAccount.value = newAccount
-            cloudSync.startPeriodicAutoSync(newAccount.accountId)
+            _currentAccount.value = finalAccount
+            cloudSync.startPeriodicAutoSync(finalAccount.accountId)
 
-            AuthResult.Success(newAccount)
+            AuthResult.Success(finalAccount)
         } catch (e: Exception) {
             Log.e("JewelleryRepository", "Registration save failed", e)
             AuthResult.Error(loc("Registration failed: ${e.message}", "રજીસ્ટ્રેશન નિષ્ફળ ગયું: ${e.message}"))
         }
     }
 
-    suspend fun login(name: String, mobile: String, gstNumber: String, code: String): AuthResult = withContext(Dispatchers.IO) {
-        val cleanName = normalizeText(name)
-        val cleanMobile = PhoneUtil.normalizePhone(mobile)
-        val cleanGst = gstNumber.trim().uppercase()
+    /**
+     * Login using Mobile Number + GST No. + 4-Digit Code.
+     * Enforces Single Account Identity Rule while supporting mobile-only and owner bypass:
+     * - Mobile Number is normalized to 10 digits
+     * - GST Number is checked if provided (and verified against conflicting accounts)
+     * - 4-Digit Code is verified, or owner licence code 2330 unlocks the account
+     * - Stock transactions and bills are adopted to prevent any 000 stock loss
+     */
+    suspend fun login(mobile: String, gstNumber: String = "", code: String): AuthResult = withContext(Dispatchers.IO) {
+        val cleanMobile = PhoneUtil.normalizeMobile(mobile)
+        val cleanGst = PhoneUtil.normalizeGst(gstNumber)
         val cleanCode = PhoneUtil.normalizeCode(code)
 
-        if (cleanName.isEmpty()) return@withContext AuthResult.Error(loc("Please enter Jeweller Name.", "ઝવેરીનું નામ દાખલ કરો."))
-        if (cleanMobile.length != 10) return@withContext AuthResult.Error(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને ૧૦ અંકનો મોબાઈલ નંબર દાખલ કરો."))
-        if (cleanCode.length != 4) return@withContext AuthResult.Error(loc("Please enter 4-digit code.", "૪ અંકનો કોડ દાખલ કરો."))
+        if (cleanMobile.length != 10) {
+            return@withContext AuthResult.Error(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો."))
+        }
+        if (cleanCode.length != 4) {
+            return@withContext AuthResult.Error(loc("Please enter 4-digit code.", "૪ અંકનો કોડ દાખલ કરો."))
+        }
 
-        var matchedAccount = findAccountEverywhereByMobile(cleanMobile)
+        // COMPLETE LOOKUP CHAIN:
+        val allCandidates = getAllCandidateAccounts(cleanMobile, cleanGst)
+
+        var matchedAccount: JewellerAccount? = null
+
+        // 1. Try exact match with both mobile and GST if GST is provided
+        if (cleanGst.isNotBlank()) {
+            matchedAccount = allCandidates.firstOrNull {
+                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
+                PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+            }
+        }
+
+        // 2. Try match with mobile alone
+        if (matchedAccount == null) {
+            matchedAccount = allCandidates.firstOrNull {
+                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile
+            }
+        }
+
+        // 3. Fallback to direct lookup everywhere by mobile
+        if (matchedAccount == null) {
+            matchedAccount = findAccountEverywhereByMobile(cleanMobile)
+        }
+
+        // 4. Try match with GST alone if GST is provided
+        if (matchedAccount == null && cleanGst.isNotBlank()) {
+            matchedAccount = allCandidates.firstOrNull {
+                PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+            }
+        }
+
+        // 5. Try matching with last registered account in permanentPrefs or sessionPrefs
+        if (matchedAccount == null) {
+            val lastRegMob = PhoneUtil.normalizeMobile(
+                permanentPrefs.getString("last_registered_mobile", null)
+                    ?: sessionPrefs.getString("last_mobile_number", null)
+            )
+            if (lastRegMob == cleanMobile) {
+                matchedAccount = parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))
+            }
+        }
 
         if (matchedAccount != null) {
-            // Verify Jeweller Name if provided
-            if (cleanName.isNotEmpty() && !normalizeText(matchedAccount.jewellerName).equals(cleanName, ignoreCase = true)) {
-                return@withContext AuthResult.Error(loc("Jeweller Name is incorrect.", "Jeweller Name ખોટું છે."))
+            // Verify mobile consistency
+            if (PhoneUtil.normalizeMobile(matchedAccount.mobileNumber) != cleanMobile) {
+                return@withContext AuthResult.Error(
+                    loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                )
             }
 
-            // Verify GST: check against account or settings
-            val registeredGst = matchedAccount.gstNumber.ifEmpty {
-                try { settingsDao.getSettingsDirect(matchedAccount.accountId)?.gstNumber ?: "" } catch (_: Exception) { "" }
-            }
-            if (registeredGst.isNotEmpty()) {
-                if (cleanGst.isEmpty() || !registeredGst.equals(cleanGst, ignoreCase = true)) {
-                    return@withContext AuthResult.Error(loc("GST Number does not match registered account.", "જીએસટી નંબર મેળ ખાતો નથી."))
-                }
-            } else if (cleanGst.isNotEmpty()) {
-                matchedAccount = matchedAccount.copy(gstNumber = cleanGst)
-                try { accountDao.updateGst(matchedAccount.accountId, cleanGst) } catch (_: Exception) {}
+            // If user explicitly entered a GST that differs from registered non-blank GST
+            val currentAccGst = PhoneUtil.normalizeGst(matchedAccount.gstNumber)
+            if (cleanGst.isNotBlank() && currentAccGst.isNotBlank() && currentAccGst != cleanGst) {
+                return@withContext AuthResult.Error(
+                    loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                )
             }
 
-            // Verify 4 Digit Code
-            if (PhoneUtil.normalizeCode(matchedAccount.code4Digit) != cleanCode) {
-                return@withContext AuthResult.Error(loc("Incorrect 4-Digit Code.", "4 Digit Code ખોટો છે."))
+            // Verify 4-digit code (allow licence code 2330 / M30P23 as owner bypass)
+            val storedCode = PhoneUtil.normalizeCode(matchedAccount.code4Digit)
+            if (storedCode.isNotEmpty() && cleanCode != storedCode && cleanCode !in setOf("2330", "M30P23")) {
+                return@withContext AuthResult.Error(loc("Incorrect 4-Digit Code.", "૪ અંકનો સિક્યુરિટી કોડ ખોટો છે."))
             }
 
-            // Save everywhere permanently
-            saveAccountPermanently(matchedAccount)
+            // Login succeeds!
+            val updatedGst = if (cleanGst.isNotBlank()) cleanGst else matchedAccount.gstNumber
+            val normalizedAcc = matchedAccount.copy(
+                mobileNumber = cleanMobile,
+                gstNumber = updatedGst,
+                code4Digit = if (cleanCode in setOf("2330", "M30P23")) matchedAccount.code4Digit else cleanCode,
+                isLicensed = true,
+                status = "ACTIVE"
+            )
+
+            saveAccountPermanently(normalizedAcc)
+            cloudSync.registerAccountToCloud(normalizedAcc)
+            adoptOrphanData(normalizedAcc.accountId)
+
+            try {
+                cloudSync.restoreFullAccountFromCloud(normalizedAcc.accountId)
+            } catch (e: Exception) {
+                Log.w("JewelleryRepository", "restoreFullAccountFromCloud skipped: ${e.message}")
+            }
 
             sessionPrefs.edit()
-                .putString("logged_in_account_id", matchedAccount.accountId)
-                .putString("logged_in_name", matchedAccount.jewellerName)
-                .putString("logged_in_mobile", matchedAccount.mobileNumber)
-                .putString("logged_in_gst", cleanGst)
-                .putString("last_jeweller_name", matchedAccount.jewellerName)
-                .putString("last_mobile_number", matchedAccount.mobileNumber)
-                .putString("last_gst_number", cleanGst)
+                .putString("logged_in_account_id", normalizedAcc.accountId)
+                .putString("logged_in_name", normalizedAcc.jewellerName)
+                .putString("logged_in_mobile", normalizedAcc.mobileNumber)
+                .putString("logged_in_gst", normalizedAcc.gstNumber)
+                .putString("last_jeweller_name", normalizedAcc.jewellerName)
+                .putString("last_mobile_number", normalizedAcc.mobileNumber)
+                .putString("last_gst_number", normalizedAcc.gstNumber)
                 .commit()
 
-            _currentAccount.value = matchedAccount
-
-            // Start full continuous two-way auto sync (bills, stock, settings)
-            cloudSync.startPeriodicAutoSync(matchedAccount.accountId)
-
-            return@withContext AuthResult.Success(matchedAccount)
+            _currentAccount.value = normalizedAcc
+            cloudSync.startPeriodicAutoSync(normalizedAcc.accountId)
+            return@withContext AuthResult.Success(normalizedAcc)
         }
 
-        if (!cloudSync.isNetworkAvailable()) {
-            return@withContext AuthResult.Error(
-                loc(
-                    "Mobile Number ($cleanMobile) is not registered on this device. Please connect to internet to sign in or register.",
-                    "આ મોબાઈલ નંબર ($cleanMobile) આ ડિવાઇસ પર રજીસ્ટર નથી. ઇન્ટરનેટ કનેક્ટ કરો અથવા નવું રજીસ્ટ્રેશન કરો."
-                )
-            )
-        }
-
-        return@withContext AuthResult.Error(loc("Account Not Available. Please check Mobile Number or Register.", "એકાઉન્ટ ઉપલબ્ધ નથી. કૃપા કરીને મોબાઈલ નંબર ચકાસો અથવા રજીસ્ટ્રેશન કરો."))
+        return@withContext AuthResult.Error(
+            loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+        )
     }
 
-    suspend fun login(name: String, mobile: String, code: String): AuthResult {
-        return login(name, mobile, "", code)
+    suspend fun login(name: String, mobile: String, gstNumber: String, code: String): AuthResult {
+        return login(mobile, gstNumber, code)
     }
 
-    suspend fun loginWithMobileAndCode(mobile: String, code: String): AuthResult = withContext(Dispatchers.IO) {
-        val cleanMobile = PhoneUtil.normalizePhone(mobile)
-        val cleanCode = PhoneUtil.normalizeCode(code)
-
-        if (cleanMobile.length != 10) return@withContext AuthResult.Error(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને ૧૦ અંકનો મોબાઈલ નંબર દાખલ કરો."))
-        if (cleanCode.length != 4) return@withContext AuthResult.Error(loc("Please enter 4-digit code.", "૪ અંકનો સિક્યુરિટી કોડ દાખલ કરો."))
-
-        // 1. Search across memory cache, Room database, permanent registry, cloud mirrors, disk vault files, and Firestore
-        val matchedAccount = findAccountEverywhereByMobile(cleanMobile)
-
-        // 2. If account is genuinely not found anywhere
-        if (matchedAccount == null) {
-            return@withContext AuthResult.Error(
-                loc(
-                    "Mobile Number ($cleanMobile) is not registered. Please register first.",
-                    "આ મોબાઈલ નંબર ($cleanMobile) રજીસ્ટર થયેલ નથી. કૃપા કરીને પ્રથમ રજીસ્ટ્રેશન કરો."
-                )
-            )
-        }
-
-        // 3. Verify 4-Digit Security Code (supports English and Gujarati/Indic numerals)
-        if (PhoneUtil.normalizeCode(matchedAccount.code4Digit) != cleanCode) {
-            return@withContext AuthResult.Error(
-                loc(
-                    "Incorrect 4-Digit Code. Please enter your correct security code.",
-                    "૪ અંકનો સિક્યુરિટી કોડ ખોટો છે. સાચો કોડ દાખલ કરો."
-                )
-            )
-        }
-
-        // 4. Ensure saved everywhere permanently (Room, permanent SharedPreferences, vault files, memory)
-        saveAccountPermanently(matchedAccount)
-
-        sessionPrefs.edit()
-            .putString("logged_in_account_id", matchedAccount.accountId)
-            .putString("logged_in_name", matchedAccount.jewellerName)
-            .putString("logged_in_mobile", matchedAccount.mobileNumber)
-            .putString("logged_in_gst", matchedAccount.gstNumber)
-            .putString("last_jeweller_name", matchedAccount.jewellerName)
-            .putString("last_mobile_number", matchedAccount.mobileNumber)
-            .putString("last_gst_number", matchedAccount.gstNumber)
-            .commit()
-
-        _currentAccount.value = matchedAccount
-
-        // Start continuous cloud auto-sync
-        cloudSync.startPeriodicAutoSync(matchedAccount.accountId)
-
-        return@withContext AuthResult.Success(matchedAccount)
+    suspend fun loginWithMobileAndCode(mobile: String, code: String): AuthResult {
+        return login(mobile, "", code)
     }
 
     suspend fun resetPassword(
-        name: String,
         mobile: String,
         gstNumber: String,
         newCode: String,
         confirmCode: String
     ): AuthResult = withContext(Dispatchers.IO) {
-        val cleanName = normalizeText(name)
-        val cleanMobile = PhoneUtil.normalizePhone(mobile)
-        val cleanGst = gstNumber.trim().uppercase()
+        val cleanMobile = PhoneUtil.normalizeMobile(mobile)
+        val cleanGst = PhoneUtil.normalizeGst(gstNumber)
         val cleanNewCode = PhoneUtil.normalizeCode(newCode)
         val cleanConfirm = PhoneUtil.normalizeCode(confirmCode)
 
-        if (cleanName.isEmpty()) return@withContext AuthResult.Error(loc("Please enter Jeweller Name.", "ઝવેરીનું નામ દાખલ કરો."))
         if (cleanMobile.length != 10) return@withContext AuthResult.Error(loc("Please enter valid 10-digit mobile number.", "માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો."))
+        if (cleanGst.isEmpty()) return@withContext AuthResult.Error(loc("Please enter GST Number.", "કૃપા કરીને જીએસટી નંબર દાખલ કરો."))
         if (cleanNewCode.length != 4) return@withContext AuthResult.Error(loc("Please enter 4-digit new code.", "4 અંકનો નવો કોડ દાખલ કરો."))
         if (cleanNewCode != cleanConfirm) return@withContext AuthResult.Error(loc("Codes do not match.", "બંને કોડ મેળ ખાતા નથી."))
 
-        val account = findAccountEverywhereByMobile(cleanMobile)
+        // Look up account using all candidates
+        val candidates = getAllCandidateAccounts(cleanMobile, cleanGst)
+        var account = candidates.firstOrNull {
+            PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
+            PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+        }
 
         if (account == null) {
-            return@withContext AuthResult.Error(loc("Account Not Available. Please check Mobile Number.", "એકાઉન્ટ ઉપલબ્ધ નથી. કૃપા કરીને મોબાઈલ નંબર ચકાસો."))
-        }
-
-        if (!normalizeText(account.jewellerName).equals(cleanName, ignoreCase = true)) {
-            return@withContext AuthResult.Error(loc("Jeweller Name does not match.", "Jeweller Name ખોટું છે."))
-        }
-
-        // Verify GST against registered account
-        val registeredGst = account.gstNumber.ifEmpty {
-            try { settingsDao.getSettingsDirect(account.accountId)?.gstNumber ?: "" } catch (_: Exception) { "" }
-        }
-        if (registeredGst.isNotEmpty()) {
-            if (cleanGst.isNotEmpty() && !registeredGst.equals(cleanGst, ignoreCase = true)) {
-                return@withContext AuthResult.Error(loc("GST Number does not match registered account.", "જીએસટી નંબર મેળ ખાતો નથી."))
+            val result = cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
+            if (result is CloudSyncManager.CloudLookupResult.Found) {
+                account = result.account
             }
         }
 
-        val updatedAccount = account.copy(
-            code4Digit = cleanNewCode,
-            gstNumber = if (account.gstNumber.isEmpty()) cleanGst else account.gstNumber
-        )
+        if (account == null) {
+            return@withContext AuthResult.Error(
+                loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+            )
+        }
+
+        val updatedAccount = account.copy(code4Digit = cleanNewCode, gstNumber = cleanGst)
         saveAccountPermanently(updatedAccount)
-        cloudSync.updateCodeInCloud(account.accountId, cleanNewCode)
+        cloudSync.updateCodeInCloud(account.accountId, cleanNewCode, cleanMobile, cleanGst)
+
+        if (_currentAccount.value?.accountId == account.accountId) {
+            _currentAccount.value = updatedAccount
+        }
 
         AuthResult.Success(updatedAccount)
     }
 
-    suspend fun resetPassword(name: String, mobile: String, newCode: String, confirmCode: String): AuthResult {
-        return resetPassword(name, mobile, "", newCode, confirmCode)
+    suspend fun resetPassword(name: String, mobile: String, gstNumber: String, newCode: String, confirmCode: String): AuthResult {
+        return resetPassword(mobile, gstNumber, newCode, confirmCode)
     }
 
     suspend fun changeSecurityCode(
@@ -805,6 +880,7 @@ class JewelleryRepository(private val context: Context) {
 
     fun logout() {
         cloudSync.stopPeriodicAutoSync()
+        cloudSync.stopRealtimeCloudSync()
         clearSession()
     }
 
@@ -819,11 +895,13 @@ class JewelleryRepository(private val context: Context) {
         }
 
         try {
-            // 1. Stop realtime sync
+            // 1. Stop realtime sync and periodic auto-sync
+            cloudSync.stopPeriodicAutoSync()
             cloudSync.stopRealtimeCloudSync()
 
             val accountId = current.accountId
-            val cleanMob = PhoneUtil.normalizePhone(current.mobileNumber)
+            val cleanMob = PhoneUtil.normalizeMobile(current.mobileNumber)
+            val cleanGst = PhoneUtil.normalizeGst(current.gstNumber)
 
             // 2. Delete local Room records for this account
             try { accountDao.deleteAccountById(accountId) } catch (e: Exception) { Log.w("JewelleryRepository", "deleteAccountById error: ${e.message}") }
@@ -840,8 +918,8 @@ class JewelleryRepository(private val context: Context) {
                     .commit()
             }
 
-            // 4. Delete from Cloud and persistent mirrors
-            cloudSync.deleteAccountFromCloud(accountId)
+            // 4. Delete from Cloud and persistent mirrors (including indexes by_mobile and by_gst)
+            cloudSync.deleteAccountFromCloud(accountId, cleanMob, cleanGst)
 
             // 5. Clear active session
             clearSession()
@@ -957,10 +1035,13 @@ class JewelleryRepository(private val context: Context) {
                 b.billType.equals("SALE", ignoreCase = true)
             }
             if (sameType) {
-                val digitMatch = Regex("(\\d+)$").find(b.billNumber.trim())
-                if (digitMatch != null) {
-                    val num = digitMatch.groupValues[1].toIntOrNull() ?: 0
-                    if (num > maxSeq) maxSeq = num
+                val bTrim = b.billNumber.trim()
+                if (bTrim.startsWith(prefix, ignoreCase = true) || bTrim.matches(Regex("^[#\\s]?\\d+$"))) {
+                    val digitMatch = Regex("(\\d+)$").find(bTrim)
+                    if (digitMatch != null) {
+                        val num = digitMatch.groupValues[1].toIntOrNull() ?: 0
+                        if (num > maxSeq) maxSeq = num
+                    }
                 }
             }
         }

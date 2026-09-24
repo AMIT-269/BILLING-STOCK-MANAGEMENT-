@@ -38,6 +38,15 @@ interface BillDao {
     @Query("SELECT COUNT(*) FROM bills WHERE accountId = :accountId")
     suspend fun getBillCount(accountId: String): Int
 
+    @Query("SELECT COUNT(*) FROM bills")
+    suspend fun getTotalBillCount(): Int
+
+    @Query("SELECT COUNT(*) FROM bills WHERE accountId IS NULL OR accountId = '' OR accountId NOT IN (SELECT accountId FROM jeweller_accounts)")
+    suspend fun getOrphanBillCount(): Int
+
+    @Query("UPDATE bills SET accountId = :targetAccountId WHERE accountId IS NULL OR accountId = '' OR accountId NOT IN (SELECT accountId FROM jeweller_accounts)")
+    suspend fun adoptOrphanBills(targetAccountId: String)
+
     @Query("SELECT * FROM bills WHERE accountId = :accountId")
     suspend fun getAllBillsDirect(accountId: String): List<Bill>
 

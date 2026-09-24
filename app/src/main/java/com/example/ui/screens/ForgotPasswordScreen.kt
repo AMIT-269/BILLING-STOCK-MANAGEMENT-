@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -34,7 +35,6 @@ fun ForgotPasswordScreen(
     onNavigateBack: () -> Unit,
     onResetSuccess: () -> Unit
 ) {
-    var jewellerName by remember { mutableStateOf("") }
     var mobileNumber by remember { mutableStateOf("") }
     var gstNumber by remember { mutableStateOf("") }
     var newCode4Digit by remember { mutableStateOf("") }
@@ -91,8 +91,8 @@ fun ForgotPasswordScreen(
 
             Text(
                 text = loc(
-                    en = "Enter your workshop name and registered mobile to set a new security code.",
-                    gu = "તમારું ઝવેરી નામ અને રજીસ્ટર્ડ મોબાઈલ દાખલ કરી નવો કોડ સેટ કરો."
+                    en = "Enter your registered Mobile Number and GST No. to set a new security code.",
+                    gu = "તમારો રજીસ્ટર્ડ મોબાઈલ નંબર અને જીએસટી નંબર દાખલ કરી નવો કોડ સેટ કરો."
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -107,27 +107,7 @@ fun ForgotPasswordScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    // 1. Workshop / Jewellers Name
-                    OutlinedTextField(
-                        value = jewellerName,
-                        onValueChange = {
-                            jewellerName = it
-                            errorMessage = null
-                        },
-                        label = { Text("${AppStrings.shopName()} *") },
-                        placeholder = { Text(loc(en = "Enter Workshop or Jeweller Name", gu = "ઝવેરીનું નામ દાખલ કરો")) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Storefront, contentDescription = null, tint = GoldDark)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("forgot_jeweller_name"),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // 2. Registered Mobile Number
+                    // 1. Registered Mobile Number (Exactly 10 digits)
                     OutlinedTextField(
                         value = mobileNumber,
                         onValueChange = {
@@ -135,6 +115,7 @@ fun ForgotPasswordScreen(
                             errorMessage = null
                         },
                         label = { Text("${loc(en = "Registered Mobile Number", gu = "રજીસ્ટર્ડ મોબાઈલ નંબર")} *") },
+                        placeholder = { Text(loc("10-digit mobile number", "૧૦-અંકનો મોબાઈલ નંબર")) },
                         leadingIcon = {
                             Icon(Icons.Default.Phone, contentDescription = null, tint = GoldDark)
                         },
@@ -147,11 +128,11 @@ fun ForgotPasswordScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // GST Number — REQUIRED
+                    // 2. GST Number — REQUIRED
                     OutlinedTextField(
                         value = gstNumber,
                         onValueChange = {
-                            gstNumber = it.uppercase()
+                            gstNumber = PhoneUtil.normalizeGst(it)
                             errorMessage = null
                         },
                         label = { Text("${AppStrings.gstNumber()} *") },
@@ -159,6 +140,10 @@ fun ForgotPasswordScreen(
                         leadingIcon = {
                             Icon(Icons.Default.Receipt, contentDescription = null, tint = GoldDark)
                         },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.Characters
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("forgot_gst_number"),
@@ -175,6 +160,7 @@ fun ForgotPasswordScreen(
                             errorMessage = null
                         },
                         label = { Text("${loc(en = "Set New 4 Digit Code", gu = "નવો 4 અંકનો કોડ")} *") },
+                        placeholder = { Text(loc("4-digit security code", "૪-અંકનો સુરક્ષા કોડ")) },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = GoldDark)
                         },
@@ -205,6 +191,7 @@ fun ForgotPasswordScreen(
                             errorMessage = null
                         },
                         label = { Text("${loc(en = "Confirm New 4 Digit Code", gu = "નવો કોડ કન્ફર્મ કરો")} *") },
+                        placeholder = { Text(loc("Re-enter 4-digit code", "૪-અંકનો કોડ ફરીથી દાખલ કરો")) },
                         leadingIcon = {
                             Icon(Icons.Default.LockOpen, contentDescription = null, tint = GoldDark)
                         },
@@ -239,33 +226,33 @@ fun ForgotPasswordScreen(
 
                     Button(
                         onClick = {
-                            if (jewellerName.trim().isEmpty()) {
-                                errorMessage = loc(en = "Please enter jeweller name.", gu = "ઝવેરીનું નામ દાખલ કરો.")
+                            val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
+                            val cleanGst = PhoneUtil.normalizeGst(gstNumber)
+                            val cleanNew = PhoneUtil.normalizeCode(newCode4Digit)
+                            val cleanConfirm = PhoneUtil.normalizeCode(confirmNewCode)
+
+                            if (cleanMobile.length != 10) {
+                                errorMessage = loc(en = "Please enter a valid 10-digit mobile number.", gu = "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")
                                 return@Button
                             }
-                            if (mobileNumber.trim().isEmpty()) {
-                                errorMessage = loc(en = "Please enter mobile number.", gu = "મોબાઈલ નંબર દાખલ કરો.")
-                                return@Button
-                            }
-                            if (gstNumber.trim().isEmpty()) {
+                            if (cleanGst.isEmpty()) {
                                 errorMessage = loc(en = "Please enter GST number.", gu = "જીએસટી નંબર દાખલ કરો.")
                                 return@Button
                             }
-                            if (newCode4Digit.length != 4) {
+                            if (cleanNew.length != 4) {
                                 errorMessage = loc(en = "Please enter 4-digit code.", gu = "4 અંકનો નવો કોડ દાખલ કરો.")
                                 return@Button
                             }
-                            if (newCode4Digit != confirmNewCode) {
+                            if (cleanNew != cleanConfirm) {
                                 errorMessage = loc(en = "Codes do not match.", gu = "બંને કોડ મેળ ખાતા નથી.")
                                 return@Button
                             }
 
                             viewModel.forgotPassword(
-                                name = jewellerName,
-                                mobile = mobileNumber,
-                                gstNumber = gstNumber,
-                                newCode = newCode4Digit,
-                                confirmCode = confirmNewCode,
+                                mobile = cleanMobile,
+                                gstNumber = cleanGst,
+                                newCode = cleanNew,
+                                confirmCode = cleanConfirm,
                                 onSuccess = onResetSuccess,
                                 onError = { err ->
                                     errorMessage = err

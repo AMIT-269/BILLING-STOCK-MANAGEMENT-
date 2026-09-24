@@ -99,6 +99,11 @@ class MainActivity : ComponentActivity() {
                                     navController.navigate("login") {
                                         popUpTo("registration") { inclusive = true }
                                     }
+                                },
+                                onRegistrationSuccess = {
+                                    navController.navigate("dashboard") {
+                                        popUpTo("registration") { inclusive = true }
+                                    }
                                 }
                             )
                         }

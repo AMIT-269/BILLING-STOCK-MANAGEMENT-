@@ -11,6 +11,7 @@ import com.example.data.model.Bill
 import com.example.data.model.JewellerAccount
 import com.example.data.model.JewellerSettings
 import com.example.data.model.StockTransaction
+import com.example.util.PhoneUtil
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.DocumentSnapshot
@@ -18,6 +19,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.coroutines.CoroutineScope
@@ -253,7 +255,7 @@ class CloudSyncManager private constructor(private val context: Context) {
         }
     }
 
-    private suspend fun <T> safeFirestoreCall(timeoutMs: Long = 8000L, block: suspend () -> T): T? {
+    private suspend fun <T> safeFirestoreCall(timeoutMs: Long = 1500L, block: suspend () -> T): T? {
         return try {
             withTimeoutOrNull(timeoutMs) {
                 block()
@@ -279,18 +281,29 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     private fun parseDocToAccount(doc: DocumentSnapshot): JewellerAccount? {
-        val name = doc.getString("jewellerName") ?: return null
-        val mobile = doc.getString("mobileNumber") ?: return null
-        if (name.isEmpty() || mobile.isEmpty()) return null
+        val mobile = PhoneUtil.normalizeMobile(doc.get("mobileNumber")?.toString())
+        if (mobile.length != 10) return null
+        val name = doc.get("jewellerName")?.toString()?.trim()?.ifBlank { "Jeweller" } ?: "Jeweller"
+        val explicitId = doc.getString("accountId") ?: doc.get("accountId")?.toString()
+        val accountId = if (!explicitId.isNullOrBlank()) explicitId else doc.id
+        val code = PhoneUtil.normalizeCode(doc.get("code4Digit")?.toString())
+        val gst = PhoneUtil.normalizeGst(doc.get("gstNumber")?.toString())
+        val isLicensed = doc.getBoolean("isLicensed") ?: (doc.get("isLicensed")?.toString()?.toBoolean() ?: true)
+        val status = doc.getString("status") ?: "ACTIVE"
+        val createdAt = when (val c = doc.get("createdAt")) {
+            is Long -> c
+            is Number -> c.toLong()
+            else -> System.currentTimeMillis()
+        }
         return JewellerAccount(
-            accountId = doc.id,
+            accountId = accountId,
             jewellerName = name,
             mobileNumber = mobile,
-            code4Digit = doc.getString("code4Digit") ?: "",
-            gstNumber = doc.getString("gstNumber") ?: "",
-            isLicensed = doc.getBoolean("isLicensed") ?: true,
-            status = doc.getString("status") ?: "ACTIVE",
-            createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+            code4Digit = code,
+            gstNumber = gst,
+            isLicensed = isLicensed,
+            status = status,
+            createdAt = createdAt
         )
     }
 
@@ -309,7 +322,8 @@ class CloudSyncManager private constructor(private val context: Context) {
         try {
             _syncStatus.value = SyncStatus.SYNCING
 
-            val cleanMob = normalizePhone(account.mobileNumber)
+            val cleanMob = PhoneUtil.normalizeMobile(account.mobileNumber)
+            val cleanGst = PhoneUtil.normalizeGst(account.gstNumber)
 
             // 1. Save to Firebase Firestore
             val fs = getFirestore()
@@ -317,46 +331,43 @@ class CloudSyncManager private constructor(private val context: Context) {
                 try {
                     val accountMap = hashMapOf(
                         "accountId" to account.accountId,
-                        "jewellerName" to account.jewellerName,
-                        "mobileNumber" to account.mobileNumber,
-                        "code4Digit" to account.code4Digit,
-                        "gstNumber" to account.gstNumber,
+                        "jewellerName" to account.jewellerName.trim(),
+                        "mobileNumber" to cleanMob,
+                        "code4Digit" to PhoneUtil.normalizeCode(account.code4Digit),
+                        "gstNumber" to cleanGst,
                         "isLicensed" to account.isLicensed,
                         "status" to account.status,
                         "createdAt" to account.createdAt
                     )
-                    safeFirestoreCall {
-                        fs.collection("jeweller_accounts")
-                            .document(account.accountId)
+                    // Write to local Firestore offline cache and queue background cloud sync
+                    fs.collection("jeweller_accounts")
+                        .document(account.accountId)
+                        .set(accountMap, SetOptions.merge())
+
+                    if (cleanMob.isNotEmpty()) {
+                        fs.collection("jeweller_accounts_by_mobile")
+                            .document(cleanMob)
                             .set(accountMap, SetOptions.merge())
-                            .await()
+                    }
 
-                        if (cleanMob.isNotEmpty()) {
-                            fs.collection("jeweller_accounts_by_mobile")
-                                .document(cleanMob)
-                                .set(accountMap, SetOptions.merge())
-                                .await()
-                        }
-
-                        if (account.gstNumber.isNotBlank()) {
-                            fs.collection("jeweller_accounts_by_gst")
-                                .document(account.gstNumber.trim().uppercase())
-                                .set(accountMap, SetOptions.merge())
-                                .await()
-                        }
+                    if (cleanGst.isNotEmpty()) {
+                        fs.collection("jeweller_accounts_by_gst")
+                            .document(cleanGst)
+                            .set(accountMap, SetOptions.merge())
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore direct save skipped or failed: ${e.message}")
                 }
             }
 
-            // 2. Load all existing accounts from all sources to avoid overwriting
-            val existing = getAllAccountsFromCloud().toMutableList()
-            val idx = existing.indexOfFirst { it.accountId == account.accountId }
+            // 2. Load all existing accounts from local mirrors to avoid overwriting
+            val normalizedAccount = account.copy(mobileNumber = cleanMob, gstNumber = cleanGst)
+            val existing = getLocalMirroredAccounts().toMutableList()
+            val idx = existing.indexOfFirst { it.accountId == account.accountId || PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
             if (idx >= 0) {
-                existing[idx] = account
+                existing[idx] = normalizedAccount
             } else {
-                existing.add(account)
+                existing.add(normalizedAccount)
             }
 
             // Serialize full list
@@ -365,9 +376,9 @@ class CloudSyncManager private constructor(private val context: Context) {
                 val obj = org.json.JSONObject().apply {
                     put("accountId", acc.accountId)
                     put("jewellerName", acc.jewellerName)
-                    put("mobileNumber", acc.mobileNumber)
-                    put("code4Digit", acc.code4Digit)
-                    put("gstNumber", acc.gstNumber)
+                    put("mobileNumber", PhoneUtil.normalizeMobile(acc.mobileNumber))
+                    put("code4Digit", PhoneUtil.normalizeCode(acc.code4Digit))
+                    put("gstNumber", PhoneUtil.normalizeGst(acc.gstNumber))
                     put("isLicensed", acc.isLicensed)
                     put("status", acc.status)
                     put("createdAt", acc.createdAt)
@@ -550,8 +561,176 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     /**
-     * Looks up an account in Cloud directly by Mobile Number
+     * Account lookup result from Cloud with clear error attribution
      */
+    sealed class CloudLookupResult {
+        data class Found(val account: JewellerAccount) : CloudLookupResult()
+        object NotFound : CloudLookupResult()
+        object Timeout : CloudLookupResult()
+        object NetworkError : CloudLookupResult()
+        data class Error(val message: String) : CloudLookupResult()
+    }
+
+    /**
+     * Centralized login lookup by Mobile Number and GST Number.
+     * Identity rule: 10-Digit Normalized Mobile Number + Uppercase Normalized GST Number.
+     * Both MUST match the same account.
+     *
+     * Lookup chain:
+     * 1. Check local mirror first
+     * 2. Direct document in jeweller_accounts_by_mobile/{normMobile} (verify GST)
+     * 3. Direct document in jeweller_accounts_by_gst/{normGst} (verify Mobile)
+     * 4. Combined Firestore query: mobileNumber == normMobile AND gstNumber == normGst
+     * 5. Mobile query with GST verification
+     * 6. Fallback cloud synced account store
+     */
+    suspend fun findAccountByMobileAndGstInCloud(
+        mobileNumber: String,
+        gstNumber: String
+    ): CloudLookupResult = withContext(Dispatchers.IO) {
+        val normMobile = PhoneUtil.normalizeMobile(mobileNumber)
+        val normGst = PhoneUtil.normalizeGst(gstNumber)
+
+        if (normMobile.length != 10 || normGst.isEmpty()) {
+            return@withContext CloudLookupResult.Error("Invalid Mobile Number or GST Number")
+        }
+
+        // 1. Check local persistent mirror first (fast offline resolution)
+        val localMatch = getLocalMirroredAccounts().firstOrNull {
+            PhoneUtil.normalizeMobile(it.mobileNumber) == normMobile && PhoneUtil.normalizeGst(it.gstNumber) == normGst
+        }
+        if (localMatch != null) {
+            return@withContext CloudLookupResult.Found(localMatch)
+        }
+
+        var networkErrorOccurred = false
+        var timeoutOccurred = false
+
+        val fs = getFirestore()
+        if (fs != null) {
+            // 2. Direct lookup in jeweller_accounts_by_mobile/{normMobile} (Cache first, then network)
+            try {
+                var directDoc = try {
+                    fs.collection("jeweller_accounts_by_mobile").document(normMobile).get(Source.CACHE).await()
+                } catch (_: Exception) { null }
+                if (directDoc == null || !directDoc.exists()) {
+                    directDoc = safeFirestoreCall(1500L) {
+                        fs.collection("jeweller_accounts_by_mobile").document(normMobile).get().await()
+                    }
+                }
+                if (directDoc?.exists() == true) {
+                    val acc = parseDocToAccount(directDoc)
+                    if (acc != null &&
+                        PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
+                        PhoneUtil.normalizeGst(acc.gstNumber) == normGst
+                    ) {
+                        saveAccountToPersistentMirror(acc)
+                        return@withContext CloudLookupResult.Found(acc)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "by_mobile lookup exception: ${e.message}")
+                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
+            }
+
+            // 3. Direct lookup in jeweller_accounts_by_gst/{normGst} (Cache first, then network)
+            try {
+                var gstDoc = try {
+                    fs.collection("jeweller_accounts_by_gst").document(normGst).get(Source.CACHE).await()
+                } catch (_: Exception) { null }
+                if (gstDoc == null || !gstDoc.exists()) {
+                    gstDoc = safeFirestoreCall(1500L) {
+                        fs.collection("jeweller_accounts_by_gst").document(normGst).get().await()
+                    }
+                }
+                if (gstDoc?.exists() == true) {
+                    val acc = parseDocToAccount(gstDoc)
+                    if (acc != null &&
+                        PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
+                        PhoneUtil.normalizeGst(acc.gstNumber) == normGst
+                    ) {
+                        saveAccountToPersistentMirror(acc)
+                        return@withContext CloudLookupResult.Found(acc)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "by_gst lookup exception: ${e.message}")
+                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
+            }
+
+            // 4. Combined query: mobileNumber == normMobile AND gstNumber == normGst
+            try {
+                val querySnap = safeFirestoreCall(1500L) {
+                    fs.collection("jeweller_accounts")
+                        .whereEqualTo("mobileNumber", normMobile)
+                        .whereEqualTo("gstNumber", normGst)
+                        .limit(1)
+                        .get()
+                        .await()
+                }
+                if (querySnap != null && !querySnap.isEmpty) {
+                    val acc = parseDocToAccount(querySnap.documents[0])
+                    if (acc != null &&
+                        PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
+                        PhoneUtil.normalizeGst(acc.gstNumber) == normGst
+                    ) {
+                        saveAccountToPersistentMirror(acc)
+                        return@withContext CloudLookupResult.Found(acc)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "combined query exception: ${e.message}")
+                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
+            }
+
+            // 5. Query jeweller_accounts by mobileNumber and inspect docs for matching GST
+            try {
+                val mobileQuerySnap = safeFirestoreCall(1500L) {
+                    fs.collection("jeweller_accounts")
+                        .whereEqualTo("mobileNumber", normMobile)
+                        .limit(5)
+                        .get()
+                        .await()
+                }
+                if (mobileQuerySnap != null && !mobileQuerySnap.isEmpty) {
+                    for (doc in mobileQuerySnap.documents) {
+                        val acc = parseDocToAccount(doc)
+                        if (acc != null &&
+                            PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
+                            PhoneUtil.normalizeGst(acc.gstNumber) == normGst
+                        ) {
+                            saveAccountToPersistentMirror(acc)
+                            return@withContext CloudLookupResult.Found(acc)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "mobile query exception: ${e.message}")
+                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
+            }
+        }
+
+        // 6. Final fallback: check all accounts from Cloud / persistent store
+        val allCloud = getAllAccountsFromCloud()
+        val fallbackMatch = allCloud.firstOrNull {
+            PhoneUtil.normalizeMobile(it.mobileNumber) == normMobile &&
+            PhoneUtil.normalizeGst(it.gstNumber) == normGst
+        }
+        if (fallbackMatch != null) {
+            saveAccountToPersistentMirror(fallbackMatch)
+            return@withContext CloudLookupResult.Found(fallbackMatch)
+        }
+
+        if (!isNetworkAvailable() || networkErrorOccurred) {
+            return@withContext CloudLookupResult.NetworkError
+        }
+
+        if (timeoutOccurred) {
+            return@withContext CloudLookupResult.Timeout
+        }
+
+        return@withContext CloudLookupResult.NotFound
+    }
     suspend fun findAccountByMobileInCloud(mobileNumber: String): JewellerAccount? = withContext(Dispatchers.IO) {
         val cleanMob = normalizePhone(mobileNumber)
         if (cleanMob.isEmpty()) return@withContext null
@@ -560,13 +739,18 @@ class CloudSyncManager private constructor(private val context: Context) {
         val localMatch = getLocalMirroredAccounts().firstOrNull { normalizePhone(it.mobileNumber) == cleanMob }
         if (localMatch != null) return@withContext localMatch
 
-        // 2. Query Firestore with 3000ms timeout
+        // 2. Query Firestore with cache first, then 1500ms network timeout
         val fs = getFirestore()
         if (fs != null && isNetworkAvailable()) {
-            // Direct document lookup by clean mobile
+            // Direct document lookup by clean mobile (Cache first)
             try {
-                val directDoc = safeFirestoreCall(3000L) {
-                    fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get().await()
+                var directDoc = try {
+                    fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get(Source.CACHE).await()
+                } catch (_: Exception) { null }
+                if (directDoc == null || !directDoc.exists()) {
+                    directDoc = safeFirestoreCall(1500L) {
+                        fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get().await()
+                    }
                 }
                 if (directDoc?.exists() == true) {
                     val acc = parseDocToAccount(directDoc)
@@ -581,7 +765,7 @@ class CloudSyncManager private constructor(private val context: Context) {
 
             // Query by mobileNumber field
             try {
-                val querySnap = safeFirestoreCall(3000L) {
+                val querySnap = safeFirestoreCall(1500L) {
                     fs.collection("jeweller_accounts")
                         .whereEqualTo("mobileNumber", cleanMob)
                         .limit(1)
@@ -763,28 +947,38 @@ class CloudSyncManager private constructor(private val context: Context) {
 
         // Also check direct Firestore query
         try {
-            val firestore = FirebaseFirestore.getInstance()
-            val snapshot = safeFirestoreCall {
-                firestore.collection("jeweller_accounts")
-                    .whereEqualTo("gstNumber", cleanGst)
-                    .get()
-                    .await()
-            }
-            if (snapshot != null) {
-                for (doc in snapshot.documents) {
-                    val name = doc.getString("jewellerName") ?: ""
-                    val mobile = doc.getString("mobileNumber") ?: ""
-                    if (name.isNotEmpty() && mobile.isNotEmpty()) {
-                        return@withContext JewellerAccount(
-                            accountId = doc.id,
-                            jewellerName = name,
-                            mobileNumber = mobile,
-                            code4Digit = doc.getString("code4Digit") ?: "",
-                            gstNumber = doc.getString("gstNumber") ?: cleanGst,
-                            isLicensed = doc.getBoolean("isLicensed") ?: true,
-                            status = doc.getString("status") ?: "ACTIVE",
-                            createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
-                        )
+            val firestore = getFirestore()
+            if (firestore != null && isNetworkAvailable()) {
+                var gstDoc = try {
+                    firestore.collection("jeweller_accounts_by_gst").document(cleanGst).get(Source.CACHE).await()
+                } catch (_: Exception) { null }
+                if (gstDoc == null || !gstDoc.exists()) {
+                    gstDoc = safeFirestoreCall(1500L) {
+                        firestore.collection("jeweller_accounts_by_gst").document(cleanGst).get().await()
+                    }
+                }
+                if (gstDoc?.exists() == true) {
+                    val acc = parseDocToAccount(gstDoc)
+                    if (acc != null) {
+                        saveAccountToPersistentMirror(acc)
+                        return@withContext acc
+                    }
+                }
+
+                val snapshot = safeFirestoreCall(1500L) {
+                    firestore.collection("jeweller_accounts")
+                        .whereEqualTo("gstNumber", cleanGst)
+                        .limit(1)
+                        .get()
+                        .await()
+                }
+                if (snapshot != null) {
+                    for (doc in snapshot.documents) {
+                        val acc = parseDocToAccount(doc)
+                        if (acc != null) {
+                            saveAccountToPersistentMirror(acc)
+                            return@withContext acc
+                        }
                     }
                 }
             }
@@ -796,20 +990,50 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     /**
-     * Updates 4-digit code in Cloud during Forgot Password reset
+     * Updates 4-digit code in Cloud during Forgot Password reset.
+     * Updates across:
+     * - jeweller_accounts/{accountId}
+     * - jeweller_accounts_by_mobile/{normalizedMobile}
+     * - jeweller_accounts_by_gst/{normalizedGST}
+     * - Cloud Shared Store & all persistent files
      */
-    suspend fun updateCodeInCloud(accountId: String, newCode: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun updateCodeInCloud(
+        accountId: String,
+        newCode: String,
+        mobileNumber: String = "",
+        gstNumber: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
         try {
-            try {
-                val firestore = FirebaseFirestore.getInstance()
-                safeFirestoreCall {
-                    firestore.collection("jeweller_accounts")
-                        .document(accountId)
-                        .update("code4Digit", newCode)
-                        .await()
+            val normCode = PhoneUtil.normalizeCode(newCode)
+            val normMobile = PhoneUtil.normalizeMobile(mobileNumber)
+            val normGst = PhoneUtil.normalizeGst(gstNumber)
+
+            val fs = getFirestore()
+            if (fs != null) {
+                try {
+                    safeFirestoreCall {
+                        fs.collection("jeweller_accounts")
+                            .document(accountId)
+                            .update("code4Digit", normCode)
+                            .await()
+
+                        if (normMobile.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_mobile")
+                                .document(normMobile)
+                                .update("code4Digit", normCode)
+                                .await()
+                        }
+
+                        if (normGst.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_gst")
+                                .document(normGst)
+                                .update("code4Digit", normCode)
+                                .await()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Firestore code update error: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Firestore code update error: ${e.message}")
             }
 
             // Update in Cloud Shared Store
@@ -818,18 +1042,18 @@ class CloudSyncManager private constructor(private val context: Context) {
             val updatedArray = org.json.JSONArray()
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                if (obj.optString("accountId") == accountId) {
-                    obj.put("code4Digit", newCode)
+                if (obj.optString("accountId") == accountId ||
+                    (normMobile.isNotEmpty() && PhoneUtil.normalizeMobile(obj.optString("mobileNumber")) == normMobile)) {
+                    obj.put("code4Digit", normCode)
                 }
                 updatedArray.put(obj)
             }
             val serialized = updatedArray.toString()
-            cloudStorePref.edit().putString("registered_accounts_list", serialized).apply()
-            try {
-                cloudDatastoreFile.writeText(serialized)
-            } catch (e: Exception) {
-                Log.w(TAG, "Mirror file write failed: ${e.message}")
-            }
+            cloudStorePref.edit().putString("registered_accounts_list", serialized).commit()
+            writeToPersistentFile(cloudDatastoreFile, serialized)
+            writeToPersistentFile(externalDatastoreFile, serialized)
+            writeToPersistentFile(cacheDatastoreFile, serialized)
+            writeToPersistentFile(dbDatastoreFile, serialized)
             true
         } catch (e: Exception) {
             Log.e(TAG, "updateCodeInCloud failed", e)
@@ -838,32 +1062,65 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     /**
-     * Deletes an account from cloud and all persistent storage layers
+     * Deletes an account from cloud and all persistent storage layers.
+     * Deletes:
+     * - jeweller_accounts/{accountId}
+     * - jeweller_accounts_by_mobile/{normalizedMobile}
+     * - jeweller_accounts_by_gst/{normalizedGST}
+     * - All persistent mirror files and SharedPreferences
      */
-    suspend fun deleteAccountFromCloud(accountId: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun deleteAccountFromCloud(
+        accountId: String,
+        mobileNumber: String = "",
+        gstNumber: String = ""
+    ): Boolean = withContext(Dispatchers.IO) {
         try {
+            val normMobile = PhoneUtil.normalizeMobile(mobileNumber)
+            val normGst = PhoneUtil.normalizeGst(gstNumber)
+
             // 1. Delete from Firestore
-            try {
-                safeFirestoreCall {
-                    FirebaseFirestore.getInstance().collection("jeweller_accounts")
-                        .document(accountId)
-                        .delete()
-                        .await()
+            val fs = getFirestore()
+            if (fs != null) {
+                try {
+                    safeFirestoreCall {
+                        fs.collection("jeweller_accounts")
+                            .document(accountId)
+                            .delete()
+                            .await()
+
+                        if (normMobile.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_mobile")
+                                .document(normMobile)
+                                .delete()
+                                .await()
+                        }
+
+                        if (normGst.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_gst")
+                                .document(normGst)
+                                .delete()
+                                .await()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Firestore deleteAccount error: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Firestore deleteAccount error: ${e.message}")
             }
 
             // 2. Filter out from SharedPreferences and persistent mirror files
-            val existing = getAllAccountsFromCloud().filter { it.accountId != accountId }
+            val existing = getAllAccountsFromCloud().filter {
+                it.accountId != accountId &&
+                (normMobile.isEmpty() || PhoneUtil.normalizeMobile(it.mobileNumber) != normMobile) &&
+                (normGst.isEmpty() || PhoneUtil.normalizeGst(it.gstNumber) != normGst)
+            }
             val jsonArray = org.json.JSONArray()
             for (acc in existing) {
                 val obj = org.json.JSONObject().apply {
                     put("accountId", acc.accountId)
                     put("jewellerName", acc.jewellerName)
-                    put("mobileNumber", acc.mobileNumber)
-                    put("code4Digit", acc.code4Digit)
-                    put("gstNumber", acc.gstNumber)
+                    put("mobileNumber", PhoneUtil.normalizeMobile(acc.mobileNumber))
+                    put("code4Digit", PhoneUtil.normalizeCode(acc.code4Digit))
+                    put("gstNumber", PhoneUtil.normalizeGst(acc.gstNumber))
                     put("isLicensed", acc.isLicensed)
                     put("status", acc.status)
                     put("createdAt", acc.createdAt)
@@ -872,9 +1129,10 @@ class CloudSyncManager private constructor(private val context: Context) {
             }
             val serialized = jsonArray.toString()
             cloudStorePref.edit().putString("registered_accounts_list", serialized).commit()
-            try { cloudDatastoreFile.writeText(serialized) } catch (_: Exception) {}
-            try { externalDatastoreFile?.writeText(serialized) } catch (_: Exception) {}
-            try { cacheDatastoreFile.writeText(serialized) } catch (_: Exception) {}
+            writeToPersistentFile(cloudDatastoreFile, serialized)
+            writeToPersistentFile(externalDatastoreFile, serialized)
+            writeToPersistentFile(cacheDatastoreFile, serialized)
+            writeToPersistentFile(dbDatastoreFile, serialized)
             true
         } catch (e: Exception) {
             Log.e(TAG, "deleteAccountFromCloud failed", e)
@@ -909,31 +1167,33 @@ class CloudSyncManager private constructor(private val context: Context) {
         var settingsRestored = false
         // Try Firestore
         try {
-            val firestore = FirebaseFirestore.getInstance()
-            val doc = safeFirestoreCall {
-                firestore.collection("jeweller_accounts")
-                    .document(accountId)
-                    .collection("settings")
-                    .document("profile")
-                    .get()
-                    .await()
-            }
+            val firestore = getFirestore()
+            if (firestore != null) {
+                val doc = safeFirestoreCall {
+                    firestore.collection("jeweller_accounts")
+                        .document(accountId)
+                        .collection("settings")
+                        .document("profile")
+                        .get()
+                        .await()
+                }
 
-            if (doc?.exists() == true) {
-                val settings = JewellerSettings(
-                    accountId = accountId,
-                    jewellerName = doc.getString("jewellerName") ?: "",
-                    address = doc.getString("address") ?: "",
-                    gstNumber = doc.getString("gstNumber") ?: "",
-                    logoBase64 = doc.getString("logoBase64"),
-                    contactNumber = doc.getString("contactNumber") ?: "",
-                    goldRate22k = doc.getDouble("goldRate22k") ?: 0.0,
-                    silverRate = doc.getDouble("silverRate") ?: 0.0,
-                    language = doc.getString("language") ?: "en",
-                    updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
-                )
-                db.settingsDao().insertOrUpdate(settings)
-                settingsRestored = true
+                if (doc?.exists() == true) {
+                    val settings = JewellerSettings(
+                        accountId = accountId,
+                        jewellerName = doc.getString("jewellerName") ?: "",
+                        address = doc.getString("address") ?: "",
+                        gstNumber = doc.getString("gstNumber") ?: "",
+                        logoBase64 = doc.getString("logoBase64"),
+                        contactNumber = doc.getString("contactNumber") ?: "",
+                        goldRate22k = doc.getDouble("goldRate22k") ?: 0.0,
+                        silverRate = doc.getDouble("silverRate") ?: 0.0,
+                        language = doc.getString("language") ?: "en",
+                        updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
+                    )
+                    db.settingsDao().insertOrUpdate(settings)
+                    settingsRestored = true
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Firestore settings restore skipped: ${e.message}")
@@ -970,14 +1230,15 @@ class CloudSyncManager private constructor(private val context: Context) {
 
         // Try Firestore
         try {
-            val firestore = FirebaseFirestore.getInstance()
-            val docs = safeFirestoreCall {
-                firestore.collection("jeweller_accounts")
-                    .document(accountId)
-                    .collection("bills")
-                    .get()
-                    .await()
-            }
+            val firestore = getFirestore()
+            if (firestore != null) {
+                val docs = safeFirestoreCall {
+                    firestore.collection("jeweller_accounts")
+                        .document(accountId)
+                        .collection("bills")
+                        .get()
+                        .await()
+                }
 
             if (docs != null) {
                 for (doc in docs.documents) {
@@ -1000,15 +1261,17 @@ class CloudSyncManager private constructor(private val context: Context) {
                         oldMetalExchangeAmount = doc.getDouble("oldMetalExchangeAmount") ?: 0.0,
                         netBalanceDue = doc.getDouble("netBalanceDue") ?: 0.0,
                         notes = doc.getString("notes") ?: "",
+                        paymentsJson = doc.getString("paymentsJson") ?: "[]",
                         createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
                         updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
                     )
                     restoredBills.add(bill)
                 }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Firestore bills restore skipped: ${e.message}")
         }
+    } catch (e: Exception) {
+        Log.w(TAG, "Firestore bills restore skipped: ${e.message}")
+    }
 
         // Also check fallback Cloud Shared Store
         val fallbackJson = cloudStorePref.getString("bills_$accountId", "[]") ?: "[]"
@@ -1038,6 +1301,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             oldMetalExchangeAmount = obj.optDouble("oldMetalExchangeAmount", 0.0),
                             netBalanceDue = obj.optDouble("netBalanceDue", 0.0),
                             notes = obj.optString("notes"),
+                            paymentsJson = obj.optString("paymentsJson", "[]"),
                             createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
                             updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                         )
@@ -1058,32 +1322,34 @@ class CloudSyncManager private constructor(private val context: Context) {
 
         // Try Firestore
         try {
-            val firestore = FirebaseFirestore.getInstance()
-            val docs = safeFirestoreCall {
-                firestore.collection("jeweller_accounts")
-                    .document(accountId)
-                    .collection("stock_transactions")
-                    .get()
-                    .await()
-            }
+            val firestore = getFirestore()
+            if (firestore != null) {
+                val docs = safeFirestoreCall {
+                    firestore.collection("jeweller_accounts")
+                        .document(accountId)
+                        .collection("stock_transactions")
+                        .get()
+                        .await()
+                }
 
-            if (docs != null) {
-                for (doc in docs.documents) {
-                    val tx = StockTransaction(
-                        id = doc.id,
-                        accountId = accountId,
-                        type = doc.getString("type") ?: "CREDIT",
-                        category = doc.getString("category") ?: "GOLD_JEWELLERY",
-                        quantityOrAmount = doc.getDouble("quantityOrAmount") ?: 0.0,
-                        unit = doc.getString("unit") ?: "g",
-                        dateTimestamp = doc.getLong("dateTimestamp") ?: System.currentTimeMillis(),
-                        remark = doc.getString("remark") ?: "",
-                        isAutomaticFromBill = doc.getBoolean("isAutomaticFromBill") ?: false,
-                        linkedBillId = doc.getString("linkedBillId"),
-                        createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
-                        updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
-                    )
-                    restoredTransactions.add(tx)
+                if (docs != null) {
+                    for (doc in docs.documents) {
+                        val tx = StockTransaction(
+                            id = doc.id,
+                            accountId = accountId,
+                            type = doc.getString("type") ?: "CREDIT",
+                            category = doc.getString("category") ?: "GOLD_JEWELLERY",
+                            quantityOrAmount = doc.getDouble("quantityOrAmount") ?: 0.0,
+                            unit = doc.getString("unit") ?: "g",
+                            dateTimestamp = doc.getLong("dateTimestamp") ?: System.currentTimeMillis(),
+                            remark = doc.getString("remark") ?: "",
+                            isAutomaticFromBill = doc.getBoolean("isAutomaticFromBill") ?: false,
+                            linkedBillId = doc.getString("linkedBillId"),
+                            createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
+                            updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
+                        )
+                        restoredTransactions.add(tx)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -1153,36 +1419,36 @@ class CloudSyncManager private constructor(private val context: Context) {
         try {
             _syncStatus.value = SyncStatus.SYNCING
             try {
-                val firestore = FirebaseFirestore.getInstance()
-                val billMap = hashMapOf(
-                    "id" to bill.id,
-                    "accountId" to bill.accountId,
-                    "billNumber" to bill.billNumber,
-                    "billType" to bill.billType,
-                    "isGstBill" to bill.isGstBill,
-                    "partyName" to bill.partyName,
-                    "partyMobile" to bill.partyMobile,
-                    "dateTimestamp" to bill.dateTimestamp,
-                    "itemsJson" to bill.itemsJson,
-                    "subtotal" to bill.subtotal,
-                    "gstPercent" to bill.gstPercent,
-                    "gstAmount" to bill.gstAmount,
-                    "discount" to bill.discount,
-                    "grandTotal" to bill.grandTotal,
-                    "cashReceivedOrPaid" to bill.cashReceivedOrPaid,
-                    "oldMetalExchangeAmount" to bill.oldMetalExchangeAmount,
-                    "netBalanceDue" to bill.netBalanceDue,
-                    "notes" to bill.notes,
-                    "createdAt" to bill.createdAt,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-                safeFirestoreCall {
+                val firestore = getFirestore()
+                if (firestore != null) {
+                    val billMap = hashMapOf(
+                        "id" to bill.id,
+                        "accountId" to bill.accountId,
+                        "billNumber" to bill.billNumber,
+                        "billType" to bill.billType,
+                        "isGstBill" to bill.isGstBill,
+                        "partyName" to bill.partyName,
+                        "partyMobile" to bill.partyMobile,
+                        "dateTimestamp" to bill.dateTimestamp,
+                        "itemsJson" to bill.itemsJson,
+                        "subtotal" to bill.subtotal,
+                        "gstPercent" to bill.gstPercent,
+                        "gstAmount" to bill.gstAmount,
+                        "discount" to bill.discount,
+                        "grandTotal" to bill.grandTotal,
+                        "cashReceivedOrPaid" to bill.cashReceivedOrPaid,
+                        "oldMetalExchangeAmount" to bill.oldMetalExchangeAmount,
+                        "netBalanceDue" to bill.netBalanceDue,
+                        "notes" to bill.notes,
+                        "paymentsJson" to bill.paymentsJson,
+                        "createdAt" to bill.createdAt,
+                        "updatedAt" to System.currentTimeMillis()
+                    )
                     firestore.collection("jeweller_accounts")
                         .document(bill.accountId)
                         .collection("bills")
                         .document(bill.id)
                         .set(billMap, SetOptions.merge())
-                        .await()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore syncBill skipped: ${e.message}")
@@ -1217,6 +1483,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                 put("oldMetalExchangeAmount", bill.oldMetalExchangeAmount)
                 put("netBalanceDue", bill.netBalanceDue)
                 put("notes", bill.notes)
+                put("paymentsJson", bill.paymentsJson)
                 put("createdAt", bill.createdAt)
                 put("updatedAt", System.currentTimeMillis())
             }
@@ -1237,14 +1504,13 @@ class CloudSyncManager private constructor(private val context: Context) {
     suspend fun deleteBillFromCloud(accountId: String, billId: String) = withContext(Dispatchers.IO) {
         try {
             try {
-                val firestore = FirebaseFirestore.getInstance()
-                safeFirestoreCall {
+                val firestore = getFirestore()
+                if (firestore != null) {
                     firestore.collection("jeweller_accounts")
                         .document(accountId)
                         .collection("bills")
                         .document(billId)
                         .delete()
-                        .await()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore deleteBill skipped: ${e.message}")
@@ -1273,28 +1539,27 @@ class CloudSyncManager private constructor(private val context: Context) {
         try {
             _syncStatus.value = SyncStatus.SYNCING
             try {
-                val firestore = FirebaseFirestore.getInstance()
-                val txMap = hashMapOf(
-                    "id" to tx.id,
-                    "accountId" to tx.accountId,
-                    "type" to tx.type,
-                    "category" to tx.category,
-                    "quantityOrAmount" to tx.quantityOrAmount,
-                    "unit" to tx.unit,
-                    "dateTimestamp" to tx.dateTimestamp,
-                    "remark" to tx.remark,
-                    "isAutomaticFromBill" to tx.isAutomaticFromBill,
-                    "linkedBillId" to (tx.linkedBillId ?: ""),
-                    "createdAt" to tx.createdAt,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-                safeFirestoreCall {
+                val firestore = getFirestore()
+                if (firestore != null) {
+                    val txMap = hashMapOf(
+                        "id" to tx.id,
+                        "accountId" to tx.accountId,
+                        "type" to tx.type,
+                        "category" to tx.category,
+                        "quantityOrAmount" to tx.quantityOrAmount,
+                        "unit" to tx.unit,
+                        "dateTimestamp" to tx.dateTimestamp,
+                        "remark" to tx.remark,
+                        "isAutomaticFromBill" to tx.isAutomaticFromBill,
+                        "linkedBillId" to (tx.linkedBillId ?: ""),
+                        "createdAt" to tx.createdAt,
+                        "updatedAt" to System.currentTimeMillis()
+                    )
                     firestore.collection("jeweller_accounts")
                         .document(tx.accountId)
                         .collection("stock_transactions")
                         .document(tx.id)
                         .set(txMap, SetOptions.merge())
-                        .await()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore syncStock skipped: ${e.message}")
@@ -1340,14 +1605,13 @@ class CloudSyncManager private constructor(private val context: Context) {
     suspend fun deleteStockTransactionFromCloud(accountId: String, txId: String) = withContext(Dispatchers.IO) {
         try {
             try {
-                val firestore = FirebaseFirestore.getInstance()
-                safeFirestoreCall {
+                val firestore = getFirestore()
+                if (firestore != null) {
                     firestore.collection("jeweller_accounts")
                         .document(accountId)
                         .collection("stock_transactions")
                         .document(txId)
                         .delete()
-                        .await()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore deleteStock error: ${e.message}")
@@ -1375,17 +1639,19 @@ class CloudSyncManager private constructor(private val context: Context) {
     suspend fun deleteLinkedStockTransactionsFromCloud(accountId: String, billId: String) = withContext(Dispatchers.IO) {
         try {
             try {
-                val firestore = FirebaseFirestore.getInstance()
-                safeFirestoreCall {
-                    val query = firestore.collection("jeweller_accounts")
-                        .document(accountId)
-                        .collection("stock_transactions")
-                        .whereEqualTo("linkedBillId", billId)
-                        .get()
-                        .await()
+                val firestore = getFirestore()
+                if (firestore != null) {
+                    safeFirestoreCall {
+                        val query = firestore.collection("jeweller_accounts")
+                            .document(accountId)
+                            .collection("stock_transactions")
+                            .whereEqualTo("linkedBillId", billId)
+                            .get()
+                            .await()
 
-                    for (doc in query.documents) {
-                        doc.reference.delete().await()
+                        for (doc in query.documents) {
+                            doc.reference.delete()
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -1415,26 +1681,25 @@ class CloudSyncManager private constructor(private val context: Context) {
         try {
             _syncStatus.value = SyncStatus.SYNCING
             try {
-                val firestore = FirebaseFirestore.getInstance()
-                val map = hashMapOf(
-                    "accountId" to settings.accountId,
-                    "jewellerName" to settings.jewellerName,
-                    "address" to settings.address,
-                    "gstNumber" to settings.gstNumber,
-                    "logoBase64" to (settings.logoBase64 ?: ""),
-                    "contactNumber" to settings.contactNumber,
-                    "goldRate22k" to settings.goldRate22k,
-                    "silverRate" to settings.silverRate,
-                    "language" to settings.language,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-                safeFirestoreCall {
+                val firestore = getFirestore()
+                if (firestore != null) {
+                    val map = hashMapOf(
+                        "accountId" to settings.accountId,
+                        "jewellerName" to settings.jewellerName,
+                        "address" to settings.address,
+                        "gstNumber" to settings.gstNumber,
+                        "logoBase64" to (settings.logoBase64 ?: ""),
+                        "contactNumber" to settings.contactNumber,
+                        "goldRate22k" to settings.goldRate22k,
+                        "silverRate" to settings.silverRate,
+                        "language" to settings.language,
+                        "updatedAt" to System.currentTimeMillis()
+                    )
                     firestore.collection("jeweller_accounts")
                         .document(settings.accountId)
                         .collection("settings")
                         .document("profile")
                         .set(map, SetOptions.merge())
-                        .await()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Firestore syncSettings skipped: ${e.message}")
@@ -1468,7 +1733,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     fun startRealtimeCloudSync(accountId: String) {
         stopRealtimeCloudSync()
         try {
-            val firestore = FirebaseFirestore.getInstance()
+            val firestore = getFirestore() ?: return
 
             // Listen for bills changes from another phone
             billListener = firestore.collection("jeweller_accounts")
@@ -1502,6 +1767,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                                         oldMetalExchangeAmount = doc.getDouble("oldMetalExchangeAmount") ?: 0.0,
                                         netBalanceDue = doc.getDouble("netBalanceDue") ?: 0.0,
                                         notes = doc.getString("notes") ?: "",
+                                        paymentsJson = doc.getString("paymentsJson") ?: "[]",
                                         createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
                                         updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
                                     )

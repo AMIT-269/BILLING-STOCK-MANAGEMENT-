@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -31,16 +32,18 @@ import com.example.util.PhoneUtil
 @Composable
 fun RegistrationScreen(
     viewModel: JewelleryViewModel,
-    onNavigateToLogin: () -> Unit
+    onNavigateToLogin: () -> Unit,
+    onRegistrationSuccess: () -> Unit = onNavigateToLogin
 ) {
     var jewellerName by remember { mutableStateOf("") }
-    var gstNumber by remember { mutableStateOf("") }
     var mobileNumber by remember { mutableStateOf("") }
+    var gstNumber by remember { mutableStateOf("") }
     var code4Digit by remember { mutableStateOf("") }
     var confirmCode4Digit by remember { mutableStateOf("") }
     var licenceCode by remember { mutableStateOf("") }
     var codeVisible by remember { mutableStateOf(false) }
     var confirmCodeVisible by remember { mutableStateOf(false) }
+    var licenceCodeVisible by remember { mutableStateOf(false) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSuccessDialog by remember { mutableStateOf(false) }
@@ -51,7 +54,7 @@ fun RegistrationScreen(
         AlertDialog(
             onDismissRequest = {
                 showSuccessDialog = false
-                onNavigateToLogin()
+                onRegistrationSuccess()
             },
             icon = {
                 Icon(
@@ -71,8 +74,8 @@ fun RegistrationScreen(
             text = {
                 Text(
                     text = loc(
-                        en = "Your Jeweller account is activated. Please login now.",
-                        gu = "તમારું એકાઉન્ટ સફળતાપૂર્વક સક્રિય થઈ ગયું છે. હવે તમે લોગિન કરી શકો છો."
+                        en = "Your Jeweller account is activated! You can now start billing and stock management.",
+                        gu = "તમારું એકાઉન્ટ સફળતાપૂર્વક સક્રિય થઈ ગયું છે! હવે તમે બિલિંગ અને સ્ટોક મેનેજમેન્ટ શરૂ કરી શકો છો."
                     ),
                     textAlign = TextAlign.Center
                 )
@@ -81,12 +84,23 @@ fun RegistrationScreen(
                 Button(
                     onClick = {
                         showSuccessDialog = false
-                        onNavigateToLogin()
+                        onRegistrationSuccess()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
                     modifier = Modifier.fillMaxWidth().testTag("reg_success_ok_btn")
                 ) {
-                    Text(loc(en = "Go to Login", gu = "લોગિન સ્ક્રીન પર જાઓ"), fontWeight = FontWeight.Bold)
+                    Text(loc(en = "Open Dashboard", gu = "ડેશબોર્ડ ખોલો"), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSuccessDialog = false
+                        onNavigateToLogin()
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("reg_success_go_login_btn")
+                ) {
+                    Text(loc(en = "Go to Login", gu = "લોગિન સ્ક્રીન પર જાઓ"), color = GoldDark)
                 }
             }
         )
@@ -150,7 +164,7 @@ fun RegistrationScreen(
                 Column(
                     modifier = Modifier.padding(20.dp)
                 ) {
-                    // 1. Jewelers Name — REQUIRED
+                    // 1. Jewellers Name — REQUIRED
                     OutlinedTextField(
                         value = jewellerName,
                         onValueChange = {
@@ -170,27 +184,7 @@ fun RegistrationScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 2. GST NO — REQUIRED
-                    OutlinedTextField(
-                        value = gstNumber,
-                        onValueChange = {
-                            gstNumber = it.uppercase()
-                            errorMessage = null
-                        },
-                        label = { Text("${AppStrings.gstNumber()} *") },
-                        placeholder = { Text(loc(en = "Enter GST Number", gu = "જીએસટી નંબર દાખલ કરો")) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Receipt, contentDescription = null, tint = GoldDark)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("reg_gst_number"),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // 3. Mobile Number — REQUIRED
+                    // 2. Mobile Number — REQUIRED (Exactly 10 digits, no +91)
                     OutlinedTextField(
                         value = mobileNumber,
                         onValueChange = {
@@ -198,6 +192,7 @@ fun RegistrationScreen(
                             errorMessage = null
                         },
                         label = { Text("${loc(en = "Mobile Number", gu = "મોબાઈલ નંબર")} *") },
+                        placeholder = { Text(loc("10-digit mobile number", "૧૦-અંકનો મોબાઈલ નંબર")) },
                         leadingIcon = {
                             Icon(Icons.Default.Phone, contentDescription = null, tint = GoldDark)
                         },
@@ -210,14 +205,38 @@ fun RegistrationScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 4. CODE (4 digit) — REQUIRED
+                    // 3. GST No. — REQUIRED
+                    OutlinedTextField(
+                        value = gstNumber,
+                        onValueChange = {
+                            gstNumber = PhoneUtil.normalizeGst(it)
+                            errorMessage = null
+                        },
+                        label = { Text("${AppStrings.gstNumber()} *") },
+                        placeholder = { Text(loc(en = "Enter GST Number", gu = "જીએસટી નંબર દાખલ કરો")) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Receipt, contentDescription = null, tint = GoldDark)
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.Characters
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("reg_gst_number"),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // 4. 4 Digit Code — REQUIRED
                     OutlinedTextField(
                         value = code4Digit,
                         onValueChange = {
                             code4Digit = PhoneUtil.sanitizeCodeInput(it)
                             errorMessage = null
                         },
-                        label = { Text("${loc(en = "CODE (4-digit)", gu = "કોડ (૪ અંક)")} *") },
+                        label = { Text("${loc(en = "4 Digit Code", gu = "૪ અંકનો કોડ")} *") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = GoldDark)
                         },
@@ -240,14 +259,14 @@ fun RegistrationScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 5. CONFORM CODE (4 digit) — REQUIRED
+                    // 5. Confirm Code — REQUIRED
                     OutlinedTextField(
                         value = confirmCode4Digit,
                         onValueChange = {
                             confirmCode4Digit = PhoneUtil.sanitizeCodeInput(it)
                             errorMessage = null
                         },
-                        label = { Text("${loc(en = "CONFORM CODE (4-digit)", gu = "કન્ફર્મ કોડ (૪ અંક)")} *") },
+                        label = { Text("${loc(en = "Confirm Code", gu = "કન્ફર્મ કોડ")} *") },
                         leadingIcon = {
                             Icon(Icons.Default.LockOpen, contentDescription = null, tint = GoldDark)
                         },
@@ -270,17 +289,32 @@ fun RegistrationScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 6. Licence code — REQUIRED (strictly secret, NO hint shown anywhere)
+                    // 6. Licence Code — REQUIRED (only during registration, never displayed afterward)
                     OutlinedTextField(
                         value = licenceCode,
                         onValueChange = {
-                            licenceCode = it
+                            licenceCode = it.uppercase()
                             errorMessage = null
                         },
-                        label = { Text("${loc(en = "Licence code", gu = "લાઇસન્સ કોડ")} *") },
+                        label = { Text("${loc(en = "Licence Code", gu = "લાઇસન્સ કોડ")} *") },
+                        placeholder = { Text(loc(en = "Enter Licence Code", gu = "લાઇસન્સ કોડ દાખલ કરો")) },
                         leadingIcon = {
                             Icon(Icons.Default.VpnKey, contentDescription = null, tint = GoldDark)
                         },
+                        trailingIcon = {
+                            IconButton(onClick = { licenceCodeVisible = !licenceCodeVisible }) {
+                                Icon(
+                                    imageVector = if (licenceCodeVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (licenceCodeVisible) "Hide licence code" else "Show licence code",
+                                    tint = GoldDark
+                                )
+                            }
+                        },
+                        visualTransformation = if (licenceCodeVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Ascii,
+                            capitalization = KeyboardCapitalization.Characters
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("reg_licence_code"),
@@ -337,38 +371,49 @@ fun RegistrationScreen(
 
                     Button(
                         onClick = {
-                            if (jewellerName.trim().isEmpty()) {
-                                errorMessage = loc(en = "Please enter jeweller name.", gu = "કૃપા કરીને ઝવેરીનું નામ દાખલ કરો.")
+                            val cleanName = jewellerName.trim()
+                            val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
+                            val cleanGst = PhoneUtil.normalizeGst(gstNumber)
+                            val cleanCode = PhoneUtil.normalizeCode(code4Digit)
+                            val cleanConfirm = PhoneUtil.normalizeCode(confirmCode4Digit)
+                            val cleanLicence = licenceCode.trim()
+
+                            if (cleanName.isEmpty()) {
+                                errorMessage = loc(en = "Please enter Jewellers Name.", gu = "કૃપા કરીને ઝવેરીનું નામ દાખલ કરો.")
                                 return@Button
                             }
-                            if (gstNumber.trim().isEmpty()) {
-                                errorMessage = loc(en = "Please enter GST number.", gu = "કૃપા કરીને જીએસટી નંબર દાખલ કરો.")
-                                return@Button
-                            }
-                            if (mobileNumber.trim().length != 10) {
+                            if (cleanMobile.length != 10) {
                                 errorMessage = loc(en = "Please enter a valid 10-digit mobile number.", gu = "કૃપા કરીને 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")
                                 return@Button
                             }
-                            if (code4Digit.length != 4) {
+                            if (cleanGst.isEmpty()) {
+                                errorMessage = loc(en = "Please enter GST number.", gu = "કૃપા કરીને જીએસટી નંબર દાખલ કરો.")
+                                return@Button
+                            }
+                            if (cleanCode.length != 4) {
                                 errorMessage = loc(en = "Please enter 4-digit code.", gu = "4 અંકનો સિક્યુરિટી કોડ દાખલ કરો.")
                                 return@Button
                             }
-                            if (code4Digit != confirmCode4Digit) {
+                            if (cleanCode != cleanConfirm) {
                                 errorMessage = loc(en = "Codes do not match.", gu = "કોડ મેળ ખાતો નથી. બંને કોડ સમાન હોવા જોઈએ.")
                                 return@Button
                             }
-                            if (!LicenceValidator.isValidLicence(licenceCode.trim())) {
+                            if (cleanLicence.isEmpty()) {
+                                errorMessage = loc(en = "Licence Code is required.", gu = "લાઇસન્સ કોડ આવશ્યક છે.")
+                                return@Button
+                            }
+                            if (!LicenceValidator.isValidLicence(cleanLicence)) {
                                 errorMessage = loc(en = "Invalid Licence Code.", gu = "અમાન્ય લાયસન્સ કોડ.")
                                 return@Button
                             }
 
                             viewModel.register(
-                                name = jewellerName,
-                                mobile = mobileNumber,
-                                code = code4Digit,
-                                confirmCode = confirmCode4Digit,
-                                licenceCode = licenceCode,
-                                gstNumber = gstNumber,
+                                name = cleanName,
+                                mobile = cleanMobile,
+                                code = cleanCode,
+                                confirmCode = cleanConfirm,
+                                licenceCode = cleanLicence,
+                                gstNumber = cleanGst,
                                 onSuccess = {
                                     showSuccessDialog = true
                                 },

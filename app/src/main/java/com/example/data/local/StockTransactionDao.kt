@@ -47,6 +47,18 @@ interface StockTransactionDao {
     @Query("SELECT COALESCE(SUM(quantityOrAmount), 0.0) FROM stock_transactions WHERE accountId = :accountId AND category = :category AND type = 'DEBIT'")
     suspend fun getTotalDebit(accountId: String, category: String): Double
 
+    @Query("SELECT COUNT(*) FROM stock_transactions WHERE accountId = :accountId")
+    suspend fun getTransactionCount(accountId: String): Int
+
+    @Query("SELECT COUNT(*) FROM stock_transactions")
+    suspend fun getTotalTransactionCount(): Int
+
+    @Query("SELECT COUNT(*) FROM stock_transactions WHERE accountId IS NULL OR accountId = '' OR accountId NOT IN (SELECT accountId FROM jeweller_accounts)")
+    suspend fun getOrphanTransactionCount(): Int
+
+    @Query("UPDATE stock_transactions SET accountId = :targetAccountId WHERE accountId IS NULL OR accountId = '' OR accountId NOT IN (SELECT accountId FROM jeweller_accounts)")
+    suspend fun adoptOrphanTransactions(targetAccountId: String)
+
     @Query("DELETE FROM stock_transactions WHERE accountId = :accountId")
     suspend fun deleteAllTransactionsForAccount(accountId: String)
 }
