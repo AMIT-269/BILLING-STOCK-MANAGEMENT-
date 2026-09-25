@@ -185,15 +185,15 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // 2. GST No.
+                    // 2. GST No. (Optional)
                     OutlinedTextField(
                         value = gstNumber,
                         onValueChange = { input ->
                             gstNumber = PhoneUtil.normalizeGst(input)
                             errorMessage = null
                         },
-                        label = { Text(loc(en = "GST No. *", gu = "જીએસટી નંબર *")) },
-                        placeholder = { Text(loc("Enter GST Number", "GST નંબર દાખલ કરો")) },
+                        label = { Text(loc(en = "GST No. (Optional)", gu = "જીએસટી નંબર (વૈકલ્પિક)")) },
+                        placeholder = { Text(loc("Enter GST Number (Optional)", "GST નંબર (વૈકલ્પિક)")) },
                         leadingIcon = {
                             Icon(Icons.Default.Badge, contentDescription = null, tint = GoldDark)
                         },
@@ -278,24 +278,31 @@ fun LoginScreen(
                                 errorMessage = loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")
                                 return@Button
                             }
-                            if (cleanGst.isEmpty()) {
-                                errorMessage = loc("Please enter GST Number.", "કૃપા કરીને જીએસટી નંબર દાખલ કરો.")
-                                return@Button
-                            }
                             if (cleanCode.length != 4) {
                                 errorMessage = loc("Please enter 4-digit code.", "૪ અંકનો કોડ દાખલ કરો.")
                                 return@Button
                             }
 
-                            viewModel.login(
-                                mobile = cleanMob,
-                                gstNumber = cleanGst,
-                                code = cleanCode,
-                                onSuccess = onLoginSuccess,
-                                onError = { err ->
-                                    errorMessage = err
-                                }
-                            )
+                            if (cleanGst.isNotBlank()) {
+                                viewModel.login(
+                                    mobile = cleanMob,
+                                    gstNumber = cleanGst,
+                                    code = cleanCode,
+                                    onSuccess = onLoginSuccess,
+                                    onError = { err ->
+                                        errorMessage = err
+                                    }
+                                )
+                            } else {
+                                viewModel.loginWithMobileAndCode(
+                                    mobile = cleanMob,
+                                    code = cleanCode,
+                                    onSuccess = onLoginSuccess,
+                                    onError = { err ->
+                                        errorMessage = err
+                                    }
+                                )
+                            }
                         },
                         enabled = !isLoading,
                         colors = ButtonDefaults.buttonColors(containerColor = GoldDark),

@@ -15,6 +15,7 @@ import com.example.data.sync.SyncStatus
 import com.example.ui.locale.AppLanguage
 import com.example.ui.locale.LanguageManager
 import com.example.util.BluetoothPrinterHelper
+import com.example.util.PhoneUtil
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
