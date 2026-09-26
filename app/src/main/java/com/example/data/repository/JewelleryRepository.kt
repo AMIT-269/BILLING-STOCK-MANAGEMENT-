@@ -319,8 +319,7 @@ class JewelleryRepository(private val context: Context) {
                 } catch (e: Exception) {
                     Log.w("JewelleryRepository", "cloud mobile+gst lookup error: ${e.message}")
                 }
-            }
-            if (cleanTargetMob.isNotEmpty()) {
+            } else if (cleanTargetMob.isNotEmpty()) {
                 try {
                     cloudSync.findAccountByMobileInCloud(cleanTargetMob)?.let { cloudAcc ->
                         if (cloudAccounts.none { it.accountId == cloudAcc.accountId }) {
@@ -330,8 +329,7 @@ class JewelleryRepository(private val context: Context) {
                 } catch (e: Exception) {
                     Log.w("JewelleryRepository", "cloud mobile lookup error: ${e.message}")
                 }
-            }
-            if (cleanTargetGst.isNotEmpty()) {
+            } else if (cleanTargetGst.isNotEmpty()) {
                 try {
                     cloudSync.findAccountByGstInCloud(cleanTargetGst)?.let { cloudAcc ->
                         if (cloudAccounts.none { it.accountId == cloudAcc.accountId }) {
@@ -363,25 +361,21 @@ class JewelleryRepository(private val context: Context) {
 
         // Room DB
         try { localList.addAll(accountDao.getAllAccounts()) } catch (_: Exception) {}
-        if (cleanTargetMob.isNotEmpty()) {
-            try { accountDao.findAccountByMobile(cleanTargetMob)?.let { localList.add(it) } } catch (_: Exception) {}
-        }
-        if (cleanTargetGst.isNotEmpty()) {
-            try { accountDao.findAccountByGst(cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
-        }
         if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
             try { accountDao.findAccountByMobileAndGst(cleanTargetMob, cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
+        } else if (cleanTargetMob.isNotEmpty()) {
+            try { accountDao.findAccountByMobile(cleanTargetMob)?.let { localList.add(it) } } catch (_: Exception) {}
+        } else if (cleanTargetGst.isNotEmpty()) {
+            try { accountDao.findAccountByGst(cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
         }
 
         // Permanent SharedPreferences
-        if (cleanTargetMob.isNotEmpty()) {
-            parseSingleAccountJson(permanentPrefs.getString("account_$cleanTargetMob", null))?.let { localList.add(it) }
-        }
-        if (cleanTargetGst.isNotEmpty()) {
-            parseSingleAccountJson(permanentPrefs.getString("account_gst_$cleanTargetGst", null))?.let { localList.add(it) }
-        }
         if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
             parseSingleAccountJson(permanentPrefs.getString("account_${cleanTargetMob}_${cleanTargetGst}", null))?.let { localList.add(it) }
+        } else if (cleanTargetMob.isNotEmpty()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_$cleanTargetMob", null))?.let { localList.add(it) }
+        } else if (cleanTargetGst.isNotEmpty()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_gst_$cleanTargetGst", null))?.let { localList.add(it) }
         }
         parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))?.let { localList.add(it) }
         localList.addAll(getPermanentAccountsList())
@@ -448,190 +442,18 @@ class JewelleryRepository(private val context: Context) {
         val cleanMobile = PhoneUtil.normalizeMobile(mobile)
         if (cleanMobile.length != 10) return@withContext null
 
-        val isOnline = cloudSync.isNetworkAvailable()
-
-        if (isOnline) {
-            // ONLINE ORDER:
-            // 1. Firestore/current cloud account FIRST
-            try {
-                val cloudMatch = cloudSync.findAccountByMobileInCloud(cleanMobile)
-                if (cloudMatch != null && PhoneUtil.normalizeMobile(cloudMatch.mobileNumber) == cleanMobile) {
-                    // Refresh and update all local persistence layers with the cloud account
-                    accountMemoryCache[getAccountIdentityKey(cloudMatch)] = cloudMatch
-                    try { accountDao.insertAccount(cloudMatch) } catch (_: Exception) {}
-                    saveAccountPermanently(cloudMatch)
-                    return@withContext cloudMatch
-                }
-            } catch (e: Exception) {
-                Log.w("JewelleryRepository", "Cloud mobile lookup exception: ${e.message}")
-            }
-
-            // 2. Room database
-            try {
-                val direct = accountDao.findAccountByMobile(cleanMobile)
-                if (direct != null && PhoneUtil.normalizeMobile(direct.mobileNumber) == cleanMobile) {
-                    accountMemoryCache[getAccountIdentityKey(direct)] = direct
-                    saveAccountPermanently(direct)
-                    return@withContext direct
-                }
-                val localAccounts = accountDao.getAllAccounts()
-                val matched = localAccounts.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                if (matched != null) {
-                    accountMemoryCache[getAccountIdentityKey(matched)] = matched
-                    saveAccountPermanently(matched)
-                    return@withContext matched
-                }
-            } catch (_: Exception) {}
-
-            // 3. SharedPreferences
-            try {
-                val directJson = permanentPrefs.getString("account_$cleanMobile", null)
-                if (!directJson.isNullOrBlank()) {
-                    parseSingleAccountJson(directJson)?.let { acc ->
-                        if (PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMobile) {
-                            accountMemoryCache[getAccountIdentityKey(acc)] = acc
-                            try { accountDao.insertAccount(acc) } catch (_: Exception) {}
-                            return@withContext acc
-                        }
-                    }
-                }
-                val lastAccJson = permanentPrefs.getString("last_registered_account", null)
-                if (!lastAccJson.isNullOrBlank()) {
-                    parseSingleAccountJson(lastAccJson)?.let { acc ->
-                        if (PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMobile) {
-                            accountMemoryCache[getAccountIdentityKey(acc)] = acc
-                            try { accountDao.insertAccount(acc) } catch (_: Exception) {}
-                            return@withContext acc
-                        }
-                    }
-                }
-                val permMatch = getPermanentAccountsList().firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                if (permMatch != null) {
-                    accountMemoryCache[getAccountIdentityKey(permMatch)] = permMatch
-                    try { accountDao.insertAccount(permMatch) } catch (_: Exception) {}
-                    return@withContext permMatch
-                }
-            } catch (_: Exception) {}
-
-            // 4. local cloud mirror
-            try {
-                val mirrored = cloudSync.getLocalMirroredAccounts()
-                val matched = mirrored.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                if (matched != null) {
-                    accountMemoryCache[getAccountIdentityKey(matched)] = matched
-                    try { accountDao.insertAccount(matched) } catch (_: Exception) {}
-                    saveAccountPermanently(matched)
-                    return@withContext matched
-                }
-            } catch (_: Exception) {}
-
-            // 5. persistent files
-            try {
-                val vaultFiles = listOf(
-                    File(context.filesDir, "jeweller_accounts_vault.json"),
-                    File(context.cacheDir, "jeweller_accounts_vault.json"),
-                    context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
-                )
-                for (f in vaultFiles) {
-                    if (f != null && f.exists()) {
-                        val raw = f.readText()
-                        val parsed = parseAccountsArrayJson(raw)
-                        val match = parsed.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                        if (match != null) {
-                            accountMemoryCache[getAccountIdentityKey(match)] = match
-                            try { accountDao.insertAccount(match) } catch (_: Exception) {}
-                            saveAccountPermanently(match)
-                            return@withContext match
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // Fallback: memory cache
-            accountMemoryCache.values.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }?.let { return@withContext it }
-        } else {
-            // OFFLINE ORDER:
-            // 1. Room
-            try {
-                val direct = accountDao.findAccountByMobile(cleanMobile)
-                if (direct != null && PhoneUtil.normalizeMobile(direct.mobileNumber) == cleanMobile) {
-                    accountMemoryCache[getAccountIdentityKey(direct)] = direct
-                    return@withContext direct
-                }
-                val localAccounts = accountDao.getAllAccounts()
-                val matched = localAccounts.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                if (matched != null) {
-                    accountMemoryCache[getAccountIdentityKey(matched)] = matched
-                    return@withContext matched
-                }
-            } catch (_: Exception) {}
-
-            // 2. SharedPreferences
-            try {
-                val directJson = permanentPrefs.getString("account_$cleanMobile", null)
-                if (!directJson.isNullOrBlank()) {
-                    parseSingleAccountJson(directJson)?.let { acc ->
-                        if (PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMobile) {
-                            accountMemoryCache[getAccountIdentityKey(acc)] = acc
-                            try { accountDao.insertAccount(acc) } catch (_: Exception) {}
-                            return@withContext acc
-                        }
-                    }
-                }
-                val lastAccJson = permanentPrefs.getString("last_registered_account", null)
-                if (!lastAccJson.isNullOrBlank()) {
-                    parseSingleAccountJson(lastAccJson)?.let { acc ->
-                        if (PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMobile) {
-                            accountMemoryCache[getAccountIdentityKey(acc)] = acc
-                            try { accountDao.insertAccount(acc) } catch (_: Exception) {}
-                            return@withContext acc
-                        }
-                    }
-                }
-                val permMatch = getPermanentAccountsList().firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                if (permMatch != null) {
-                    accountMemoryCache[getAccountIdentityKey(permMatch)] = permMatch
-                    try { accountDao.insertAccount(permMatch) } catch (_: Exception) {}
-                    return@withContext permMatch
-                }
-            } catch (_: Exception) {}
-
-            // 3. local cloud mirror
-            try {
-                val mirrored = cloudSync.getLocalMirroredAccounts()
-                val matched = mirrored.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                if (matched != null) {
-                    accountMemoryCache[getAccountIdentityKey(matched)] = matched
-                    try { accountDao.insertAccount(matched) } catch (_: Exception) {}
-                    saveAccountPermanently(matched)
-                    return@withContext matched
-                }
-            } catch (_: Exception) {}
-
-            // 4. persistent files
-            try {
-                val vaultFiles = listOf(
-                    File(context.filesDir, "jeweller_accounts_vault.json"),
-                    File(context.cacheDir, "jeweller_accounts_vault.json"),
-                    context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
-                )
-                for (f in vaultFiles) {
-                    if (f != null && f.exists()) {
-                        val raw = f.readText()
-                        val parsed = parseAccountsArrayJson(raw)
-                        val match = parsed.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-                        if (match != null) {
-                            accountMemoryCache[getAccountIdentityKey(match)] = match
-                            try { accountDao.insertAccount(match) } catch (_: Exception) {}
-                            saveAccountPermanently(match)
-                            return@withContext match
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // 5. memory cache
-            accountMemoryCache.values.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }?.let { return@withContext it }
+        val candidates = getAllCandidateAccounts(cleanMobile, "")
+        val matchingAccounts = candidates.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
+        if (matchingAccounts.size > 1) {
+            // Multiple accounts share this mobile with different GSTs.
+            // DO NOT GUESS! Exact Mobile + GST is required.
+            Log.w("JewelleryRepository", "Multiple accounts share mobile $cleanMobile (${matchingAccounts.size} found). Cannot guess account.")
+            return@withContext null
+        }
+        if (matchingAccounts.size == 1) {
+            val single = matchingAccounts.first()
+            saveAccountPermanently(single)
+            return@withContext single
         }
 
         return@withContext null
@@ -680,8 +502,13 @@ class JewelleryRepository(private val context: Context) {
                     val cleanG = PhoneUtil.normalizeGst(savedGst)
                     if (cleanG.isNotEmpty()) {
                         account = accountDao.findAccountByMobileAndGst(cleanMob, cleanG)
-                    }
-                    if (account == null) {
+                        if (account == null) {
+                            val cloudRes = cloudSync.findAccountByMobileAndGstInCloud(cleanMob, cleanG)
+                            if (cloudRes is CloudSyncManager.CloudLookupResult.Found) {
+                                account = cloudRes.account
+                            }
+                        }
+                    } else {
                         account = findAccountEverywhereByMobile(savedMobile)
                     }
                 }
@@ -915,7 +742,7 @@ class JewelleryRepository(private val context: Context) {
                 // If exact Mobile + GST cannot be found:
                 if (matchedAccount == null) {
                     return@withContext AuthResult.Error(
-                        loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
+                        loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
                     )
                 }
             } else {
@@ -1103,17 +930,106 @@ class JewelleryRepository(private val context: Context) {
             try { stockDao.deleteAllTransactionsForAccount(accountId) } catch (e: Exception) { Log.w("JewelleryRepository", "deleteAllTransactions error: ${e.message}") }
 
             // 3. Clear from memory & permanent registry
-            if (cleanMob.isNotEmpty()) {
-                val identityKey = getAccountIdentityKey(cleanMob, cleanGst)
-                accountMemoryCache.remove(identityKey)
-                accountMemoryCache.remove(cleanMob)
-                permanentPrefs.edit()
-                    .remove("account_$cleanMob")
-                    .remove("code_$cleanMob")
-                    .remove("account_${cleanMob}_${cleanGst}")
-                    .remove("code_${cleanMob}_${cleanGst}")
-                    .commit()
+            val identityKey = getAccountIdentityKey(cleanMob, cleanGst)
+            accountMemoryCache.remove(identityKey)
+
+            val editor = permanentPrefs.edit()
+            if (cleanMob.isNotEmpty() && cleanGst.isNotEmpty()) {
+                editor.remove("account_${cleanMob}_${cleanGst}")
+                editor.remove("code_${cleanMob}_${cleanGst}")
             }
+            if (cleanGst.isNotEmpty()) {
+                editor.remove("account_gst_$cleanGst")
+                editor.remove("code_gst_$cleanGst")
+            }
+
+            // Filter out ONLY this exact target account from registered_accounts_list
+            val remainingAccounts = getPermanentAccountsList().filter {
+                val matchesId = accountId.isNotBlank() && it.accountId == accountId
+                val matchesIdentity = cleanMob.isNotEmpty() && cleanGst.isNotEmpty() &&
+                    PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob &&
+                    PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+                !(matchesId || matchesIdentity)
+            }
+            val jsonArray = JSONArray()
+            for (acc in remainingAccounts) {
+                jsonArray.put(JSONObject().apply {
+                    put("accountId", acc.accountId)
+                    put("jewellerName", acc.jewellerName)
+                    put("mobileNumber", acc.mobileNumber)
+                    put("code4Digit", acc.code4Digit)
+                    put("gstNumber", acc.gstNumber)
+                    put("isLicensed", acc.isLicensed)
+                    put("status", acc.status)
+                    put("createdAt", acc.createdAt)
+                })
+            }
+            val listJson = jsonArray.toString()
+            editor.putString("registered_accounts_list", listJson)
+
+            // If account_$cleanMob belonged to this account, check if another account shares this mobile
+            if (cleanMob.isNotEmpty()) {
+                val existingDirect = parseSingleAccountJson(permanentPrefs.getString("account_$cleanMob", null))
+                if (existingDirect?.accountId == accountId ||
+                    (cleanGst.isNotEmpty() && PhoneUtil.normalizeGst(existingDirect?.gstNumber) == cleanGst)
+                ) {
+                    val remainingSameMobile = remainingAccounts.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
+                    if (remainingSameMobile != null) {
+                        val remJson = JSONObject().apply {
+                            put("accountId", remainingSameMobile.accountId)
+                            put("jewellerName", remainingSameMobile.jewellerName)
+                            put("mobileNumber", remainingSameMobile.mobileNumber)
+                            put("code4Digit", remainingSameMobile.code4Digit)
+                            put("gstNumber", remainingSameMobile.gstNumber)
+                            put("isLicensed", remainingSameMobile.isLicensed)
+                            put("status", remainingSameMobile.status)
+                            put("createdAt", remainingSameMobile.createdAt)
+                        }.toString()
+                        editor.putString("account_$cleanMob", remJson)
+                        editor.putString("code_$cleanMob", remainingSameMobile.code4Digit)
+                    } else {
+                        editor.remove("account_$cleanMob")
+                        editor.remove("code_$cleanMob")
+                    }
+                }
+            }
+
+            // Check last_registered_account
+            val lastAcc = parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))
+            if (lastAcc?.accountId == accountId ||
+                (cleanMob.isNotEmpty() && cleanGst.isNotEmpty() &&
+                    PhoneUtil.normalizeMobile(lastAcc?.mobileNumber) == cleanMob &&
+                    PhoneUtil.normalizeGst(lastAcc?.gstNumber) == cleanGst)
+            ) {
+                val remaining = remainingAccounts.firstOrNull()
+                if (remaining != null) {
+                    val remJson = JSONObject().apply {
+                        put("accountId", remaining.accountId)
+                        put("jewellerName", remaining.jewellerName)
+                        put("mobileNumber", remaining.mobileNumber)
+                        put("code4Digit", remaining.code4Digit)
+                        put("gstNumber", remaining.gstNumber)
+                        put("isLicensed", remaining.isLicensed)
+                        put("status", remaining.status)
+                        put("createdAt", remaining.createdAt)
+                    }.toString()
+                    editor.putString("last_registered_account", remJson)
+                    editor.putString("last_registered_mobile", remaining.mobileNumber)
+                    editor.putString("last_registered_name", remaining.jewellerName)
+                    editor.putString("last_registered_gst", remaining.gstNumber)
+                    editor.putString("last_registered_code", remaining.code4Digit)
+                } else {
+                    editor.remove("last_registered_account")
+                    editor.remove("last_registered_mobile")
+                    editor.remove("last_registered_name")
+                    editor.remove("last_registered_gst")
+                    editor.remove("last_registered_code")
+                }
+            }
+            editor.commit()
+
+            // Update vault files
+            writeVaultFiles(listJson)
 
             // 4. Delete from Cloud and persistent mirrors (including indexes by_mobile and by_gst)
             cloudSync.deleteAccountFromCloud(accountId, cleanMob, cleanGst)

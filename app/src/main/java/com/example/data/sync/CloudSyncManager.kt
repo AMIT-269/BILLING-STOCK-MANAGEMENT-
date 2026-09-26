@@ -22,6 +22,15 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -107,6 +116,50 @@ class CloudSyncManager private constructor(private val context: Context) {
     init {
         loadPendingQueueFromDisk()
         initNetworkMonitoring()
+        schedulePeriodicSafetySync()
+    }
+
+    fun scheduleWorkManagerSync() {
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val syncWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints)
+                .setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    10,
+                    TimeUnit.SECONDS
+                )
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                SyncWorker.WORK_NAME_ONE_TIME,
+                ExistingWorkPolicy.REPLACE,
+                syncWorkRequest
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Error scheduling WorkManager sync: ${e.message}")
+        }
+    }
+
+    fun schedulePeriodicSafetySync() {
+        try {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val periodicRequest = PeriodicWorkRequestBuilder<SyncWorker>(
+                15, TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                SyncWorker.WORK_NAME_PERIODIC,
+                ExistingPeriodicWorkPolicy.KEEP,
+                periodicRequest
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Error scheduling periodic safety sync: ${e.message}")
+        }
     }
 
     private fun loadPendingQueueFromDisk() {
@@ -341,16 +394,33 @@ class CloudSyncManager private constructor(private val context: Context) {
                         "createdAt" to account.createdAt
                     )
                     val res = safeFirestoreCall(8000L) {
+                        // 1. Authoritative source: jeweller_accounts/{accountId}
                         fs.collection("jeweller_accounts")
                             .document(account.accountId)
                             .set(accountMap, SetOptions.merge())
                             .await()
 
-                        if (cleanMob.isNotEmpty()) {
-                            fs.collection("jeweller_accounts_by_mobile")
-                                .document(cleanMob)
+                        // 2. Identity index document: jeweller_accounts_by_identity/{mobile}_{gst}
+                        if (cleanMob.isNotEmpty() && cleanGst.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_identity")
+                                .document("${cleanMob}_${cleanGst}")
                                 .set(accountMap, SetOptions.merge())
                                 .await()
+                        }
+
+                        // 3. Mobile index: NEVER overwrite an account with a different GST!
+                        if (cleanMob.isNotEmpty()) {
+                            try {
+                                val existingMobDoc = fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get().await()
+                                val docAccId = existingMobDoc.getString("accountId")
+                                val docGst = PhoneUtil.normalizeGst(existingMobDoc.getString("gstNumber"))
+                                if (!existingMobDoc.exists() || docAccId == account.accountId || docGst == cleanGst || docGst.isEmpty()) {
+                                    fs.collection("jeweller_accounts_by_mobile")
+                                        .document(cleanMob)
+                                        .set(accountMap, SetOptions.merge())
+                                        .await()
+                                }
+                            } catch (_: Exception) {}
                         }
 
                         if (cleanGst.isNotEmpty()) {
@@ -370,7 +440,10 @@ class CloudSyncManager private constructor(private val context: Context) {
             // 2. Load all existing accounts from local mirrors to avoid overwriting
             val normalizedAccount = account.copy(mobileNumber = cleanMob, gstNumber = cleanGst)
             val existing = getLocalMirroredAccounts().toMutableList()
-            val idx = existing.indexOfFirst { it.accountId == account.accountId || PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
+            val idx = existing.indexOfFirst {
+                (account.accountId.isNotBlank() && it.accountId == account.accountId) ||
+                (PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob && PhoneUtil.normalizeGst(it.gstNumber) == cleanGst)
+            }
             if (idx >= 0) {
                 existing[idx] = normalizedAccount
             } else {
@@ -463,12 +536,21 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun saveAccountToPersistentMirror(account: JewellerAccount) {
+        val cleanMob = PhoneUtil.normalizeMobile(account.mobileNumber)
+        val cleanGst = PhoneUtil.normalizeGst(account.gstNumber)
+        val normalizedAccount = account.copy(mobileNumber = cleanMob, gstNumber = cleanGst)
         val existing = getLocalMirroredAccounts().toMutableList()
-        val index = existing.indexOfFirst { it.accountId == account.accountId }
+        val index = existing.indexOfFirst {
+            if (account.accountId.isNotBlank() && it.accountId.isNotBlank()) {
+                it.accountId == account.accountId
+            } else {
+                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob && PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+            }
+        }
         if (index >= 0) {
-            existing[index] = account
+            existing[index] = normalizedAccount
         } else {
-            existing.add(account)
+            existing.add(normalizedAccount)
         }
         try {
             val jsonArray = org.json.JSONArray()
@@ -610,7 +692,64 @@ class CloudSyncManager private constructor(private val context: Context) {
         val fs = getFirestore()
         // 1. When online, query Firestore SERVER FIRST before local mirror
         if (fs != null && isNetworkAvailable()) {
-            // 1a. Direct lookup in jeweller_accounts_by_mobile/{normMobile} (SERVER first)
+            // 1a. Direct lookup in jeweller_accounts_by_identity/{normMobile}_{normGst} (SERVER first)
+            try {
+                val identDoc = safeFirestoreCall {
+                    try {
+                        fs.collection("jeweller_accounts_by_identity").document("${normMobile}_${normGst}").get(Source.SERVER).await()
+                    } catch (_: Exception) {
+                        fs.collection("jeweller_accounts_by_identity").document("${normMobile}_${normGst}").get().await()
+                    }
+                }
+                if (identDoc?.exists() == true) {
+                    val acc = parseDocToAccount(identDoc)
+                    if (acc != null &&
+                        PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
+                        PhoneUtil.normalizeGst(acc.gstNumber) == normGst
+                    ) {
+                        saveAccountToPersistentMirror(acc)
+                        return@withContext CloudLookupResult.Found(acc)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "by_identity SERVER lookup exception: ${e.message}")
+            }
+
+            // 1b. Combined SERVER query in authoritative collection jeweller_accounts: mobileNumber == normMobile AND gstNumber == normGst
+            try {
+                val querySnap = safeFirestoreCall {
+                    try {
+                        fs.collection("jeweller_accounts")
+                            .whereEqualTo("mobileNumber", normMobile)
+                            .whereEqualTo("gstNumber", normGst)
+                            .limit(1)
+                            .get(Source.SERVER)
+                            .await()
+                    } catch (_: Exception) {
+                        fs.collection("jeweller_accounts")
+                            .whereEqualTo("mobileNumber", normMobile)
+                            .whereEqualTo("gstNumber", normGst)
+                            .limit(1)
+                            .get()
+                            .await()
+                    }
+                }
+                if (querySnap != null && !querySnap.isEmpty) {
+                    val acc = parseDocToAccount(querySnap.documents[0])
+                    if (acc != null &&
+                        PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
+                        PhoneUtil.normalizeGst(acc.gstNumber) == normGst
+                    ) {
+                        saveAccountToPersistentMirror(acc)
+                        return@withContext CloudLookupResult.Found(acc)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "combined SERVER query exception: ${e.message}")
+                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
+            }
+
+            // 1c. Direct lookup in jeweller_accounts_by_mobile/{normMobile} (SERVER first - ONLY if GST matches!)
             try {
                 val directDoc = safeFirestoreCall {
                     try {
@@ -655,40 +794,6 @@ class CloudSyncManager private constructor(private val context: Context) {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "by_gst SERVER lookup exception: ${e.message}")
-                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
-            }
-
-            // 1c. Combined SERVER query: mobileNumber == normMobile AND gstNumber == normGst
-            try {
-                val querySnap = safeFirestoreCall {
-                    try {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", normMobile)
-                            .whereEqualTo("gstNumber", normGst)
-                            .limit(1)
-                            .get(Source.SERVER)
-                            .await()
-                    } catch (_: Exception) {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", normMobile)
-                            .whereEqualTo("gstNumber", normGst)
-                            .limit(1)
-                            .get()
-                            .await()
-                    }
-                }
-                if (querySnap != null && !querySnap.isEmpty) {
-                    val acc = parseDocToAccount(querySnap.documents[0])
-                    if (acc != null &&
-                        PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
-                        PhoneUtil.normalizeGst(acc.gstNumber) == normGst
-                    ) {
-                        saveAccountToPersistentMirror(acc)
-                        return@withContext CloudLookupResult.Found(acc)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "combined SERVER query exception: ${e.message}")
                 if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
             }
 
@@ -760,6 +865,14 @@ class CloudSyncManager private constructor(private val context: Context) {
         val cleanMob = PhoneUtil.normalizeMobile(mobileNumber)
         if (cleanMob.length != 10) return@withContext null
 
+        val allCloud = getAllAccountsFromCloud()
+        val allSameMob = allCloud.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
+        if (allSameMob.size > 1) {
+            // Multiple accounts share this mobile with different GSTs! Do NOT guess.
+            Log.w(TAG, "Multiple cloud accounts found for mobile $cleanMob. GST is required.")
+            return@withContext null
+        }
+
         // 1 & 2. Query Firestore SERVER lookup and query first when network is available
         val fs = getFirestore()
         if (fs != null && isNetworkAvailable()) {
@@ -780,7 +893,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                 }
                 if (directDoc?.exists() == true) {
                     val acc = parseDocToAccount(directDoc)
-                    if (acc != null && PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMob) {
+                    if (acc != null && PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMob && allSameMob.size <= 1) {
                         saveAccountToPersistentMirror(acc)
                         return@withContext acc
                     }
@@ -795,20 +908,26 @@ class CloudSyncManager private constructor(private val context: Context) {
                     try {
                         fs.collection("jeweller_accounts")
                             .whereEqualTo("mobileNumber", cleanMob)
-                            .limit(1)
+                            .limit(5)
                             .get(Source.SERVER)
                             .await()
                     } catch (e: Exception) {
                         fs.collection("jeweller_accounts")
                             .whereEqualTo("mobileNumber", cleanMob)
-                            .limit(1)
+                            .limit(5)
                             .get()
                             .await()
                     }
                 }
                 if (querySnap != null && !querySnap.isEmpty) {
-                    val acc = parseDocToAccount(querySnap.documents[0])
-                    if (acc != null && PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMob) {
+                    val accs = querySnap.documents.mapNotNull { parseDocToAccount(it) }
+                        .filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
+                    if (accs.size > 1) {
+                        Log.w(TAG, "Multiple Firestore accounts share mobile $cleanMob. Cannot select without GST.")
+                        return@withContext null
+                    }
+                    if (accs.size == 1) {
+                        val acc = accs.first()
                         saveAccountToPersistentMirror(acc)
                         return@withContext acc
                     }
@@ -819,132 +938,38 @@ class CloudSyncManager private constructor(private val context: Context) {
         }
 
         // 3. Existing local cloud mirror as fallback
-        val localMatch = getLocalMirroredAccounts().firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
-        if (localMatch != null) return@withContext localMatch
-
-        val allCloud = getAllAccountsFromCloud()
-        return@withContext allCloud.firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
-    }
-
-    /**
-     * Looks up an account in Cloud by Jeweller Name and Mobile (for Login on new phone / reinstall / forgot password)
-     */
-    suspend fun findAccountInCloud(jewellerName: String, mobileNumber: String): JewellerAccount? = withContext(Dispatchers.IO) {
-        val normName = normalizeText(jewellerName)
-        val normMobile = normalizePhone(mobileNumber)
-
-        // 1. Direct Firestore lookups for instant multi-device recognition
-        val fs = getFirestore()
-        if (fs != null) {
-            if (normName.isNotEmpty() && normMobile.isNotEmpty()) {
-                // When both name and mobile are specified, the record MUST match both!
-                try {
-                    val directDoc = safeFirestoreCall {
-                        fs.collection("jeweller_accounts_by_mobile").document(normMobile).get().await()
-                    }
-                    if (directDoc?.exists() == true) {
-                        val acc = parseDocToAccount(directDoc)
-                        if (acc != null && normalizeText(acc.jewellerName).equals(normName, ignoreCase = true)) {
-                            return@withContext acc
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "direct by_mobile in findAccountInCloud: ${e.message}")
-                }
-
-                try {
-                    val querySnap = safeFirestoreCall {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", normMobile)
-                            .get()
-                            .await()
-                    }
-                    if (querySnap != null && !querySnap.isEmpty) {
-                        for (doc in querySnap.documents) {
-                            val acc = parseDocToAccount(doc)
-                            if (acc != null && normalizeText(acc.jewellerName).equals(normName, ignoreCase = true)) {
-                                return@withContext acc
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "query mobileNumber in findAccountInCloud: ${e.message}")
-                }
-            } else if (normMobile.isNotEmpty()) {
-                // Only mobile specified
-                try {
-                    val directDoc = safeFirestoreCall {
-                        fs.collection("jeweller_accounts_by_mobile").document(normMobile).get().await()
-                    }
-                    if (directDoc?.exists() == true) {
-                        val acc = parseDocToAccount(directDoc)
-                        if (acc != null) return@withContext acc
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "direct by_mobile in findAccountInCloud: ${e.message}")
-                }
-
-                try {
-                    val querySnap = safeFirestoreCall {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", normMobile)
-                            .get()
-                            .await()
-                    }
-                    if (querySnap != null && !querySnap.isEmpty) {
-                        for (doc in querySnap.documents) {
-                            val acc = parseDocToAccount(doc)
-                            if (acc != null) return@withContext acc
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "query mobileNumber in findAccountInCloud: ${e.message}")
-                }
-            } else if (normName.isNotEmpty()) {
-                // Only name specified
-                try {
-                    val queryName = safeFirestoreCall {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("jewellerName", jewellerName.trim())
-                            .get()
-                            .await()
-                    }
-                    if (queryName != null && !queryName.isEmpty) {
-                        for (doc in queryName.documents) {
-                            val acc = parseDocToAccount(doc)
-                            if (acc != null) return@withContext acc
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "query jewellerName in findAccountInCloud: ${e.message}")
-                }
-            }
+        val localMatches = getLocalMirroredAccounts().filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
+        if (localMatches.size > 1) {
+            Log.w(TAG, "Multiple local mirrored accounts share mobile $cleanMob. Cannot select without GST.")
+            return@withContext null
         }
+        if (localMatches.size == 1) return@withContext localMatches.first()
 
-        val allCloud = getAllAccountsFromCloud()
-        
-        // Exact match on both
-        val exact = allCloud.firstOrNull {
-            normalizePhone(it.mobileNumber) == normMobile &&
-            normalizeText(it.jewellerName).equals(normName, ignoreCase = true)
-        }
-        if (exact != null) return@withContext exact
-
-        // If only mobile was given
-        if (normName.isEmpty() && normMobile.isNotEmpty()) {
-            val phoneMatch = allCloud.firstOrNull { normalizePhone(it.mobileNumber) == normMobile }
-            if (phoneMatch != null) return@withContext phoneMatch
-        }
-
-        // If only name was given
-        if (normMobile.isEmpty() && normName.isNotEmpty()) {
-            val nameMatch = allCloud.firstOrNull {
-                normalizeText(it.jewellerName).equals(normName, ignoreCase = true)
-            }
-            if (nameMatch != null) return@withContext nameMatch
+        if (allSameMob.size == 1) {
+            return@withContext allSameMob.first()
         }
 
         null
+    }
+
+    /**
+     * Legacy Cloud account lookup by mobile (replaces old Jeweller Name identity logic).
+     */
+    suspend fun findAccountInCloud(
+        jewellerName: String,
+        mobileNumber: String,
+        gstNumber: String = ""
+    ): JewellerAccount? = withContext(Dispatchers.IO) {
+        val normMobile = PhoneUtil.normalizeMobile(mobileNumber)
+        val normGst = PhoneUtil.normalizeGst(gstNumber)
+        if (normGst.isNotEmpty()) {
+            val res = findAccountByMobileAndGstInCloud(normMobile, normGst)
+            if (res is CloudLookupResult.Found) return@withContext res.account
+            return@withContext null
+        }
+        if (normMobile.length != 10) return@withContext null
+
+        return@withContext findAccountByMobileInCloud(normMobile)
     }
 
     /**
@@ -1027,23 +1052,45 @@ class CloudSyncManager private constructor(private val context: Context) {
             if (fs != null) {
                 try {
                     safeFirestoreCall {
-                        fs.collection("jeweller_accounts")
-                            .document(accountId)
-                            .update("code4Digit", normCode)
-                            .await()
-
-                        if (normMobile.isNotEmpty()) {
-                            fs.collection("jeweller_accounts_by_mobile")
-                                .document(normMobile)
+                        if (accountId.isNotBlank()) {
+                            fs.collection("jeweller_accounts")
+                                .document(accountId)
                                 .update("code4Digit", normCode)
                                 .await()
                         }
 
-                        if (normGst.isNotEmpty()) {
-                            fs.collection("jeweller_accounts_by_gst")
-                                .document(normGst)
+                        if (normMobile.isNotEmpty() && normGst.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_identity")
+                                .document("${normMobile}_${normGst}")
                                 .update("code4Digit", normCode)
                                 .await()
+                        }
+
+                        if (normMobile.isNotEmpty()) {
+                            try {
+                                val mobDoc = fs.collection("jeweller_accounts_by_mobile").document(normMobile).get().await()
+                                val docAccId = mobDoc.getString("accountId")
+                                val docGst = PhoneUtil.normalizeGst(mobDoc.getString("gstNumber"))
+                                if (docAccId == accountId || (normGst.isNotEmpty() && docGst == normGst)) {
+                                    fs.collection("jeweller_accounts_by_mobile")
+                                        .document(normMobile)
+                                        .update("code4Digit", normCode)
+                                        .await()
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        if (normGst.isNotEmpty()) {
+                            try {
+                                val gstDoc = fs.collection("jeweller_accounts_by_gst").document(normGst).get().await()
+                                val docAccId = gstDoc.getString("accountId")
+                                if (docAccId == accountId) {
+                                    fs.collection("jeweller_accounts_by_gst")
+                                        .document(normGst)
+                                        .update("code4Digit", normCode)
+                                        .await()
+                                }
+                            } catch (_: Exception) {}
                         }
                     }
                 } catch (e: Exception) {
@@ -1051,14 +1098,17 @@ class CloudSyncManager private constructor(private val context: Context) {
                 }
             }
 
-            // Update in Cloud Shared Store
+            // Update in Cloud Shared Store ONLY for this specific account
             val accountsJson = cloudStorePref.getString("registered_accounts_list", "[]") ?: "[]"
             val jsonArray = org.json.JSONArray(accountsJson)
             val updatedArray = org.json.JSONArray()
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
-                if (obj.optString("accountId") == accountId ||
-                    (normMobile.isNotEmpty() && PhoneUtil.normalizeMobile(obj.optString("mobileNumber")) == normMobile)) {
+                val matchesId = accountId.isNotBlank() && obj.optString("accountId") == accountId
+                val matchesIdentity = normMobile.isNotEmpty() && normGst.isNotEmpty() &&
+                    PhoneUtil.normalizeMobile(obj.optString("mobileNumber")) == normMobile &&
+                    PhoneUtil.normalizeGst(obj.optString("gstNumber")) == normGst
+                if (matchesId || matchesIdentity) {
                     obj.put("code4Digit", normCode)
                 }
                 updatedArray.put(obj)
@@ -1098,23 +1148,67 @@ class CloudSyncManager private constructor(private val context: Context) {
             if (fs != null) {
                 try {
                     safeFirestoreCall {
-                        fs.collection("jeweller_accounts")
-                            .document(accountId)
-                            .delete()
-                            .await()
-
-                        if (normMobile.isNotEmpty()) {
-                            fs.collection("jeweller_accounts_by_mobile")
-                                .document(normMobile)
+                        if (accountId.isNotBlank()) {
+                            fs.collection("jeweller_accounts")
+                                .document(accountId)
                                 .delete()
                                 .await()
                         }
 
-                        if (normGst.isNotEmpty()) {
-                            fs.collection("jeweller_accounts_by_gst")
-                                .document(normGst)
+                        if (normMobile.isNotEmpty() && normGst.isNotEmpty()) {
+                            fs.collection("jeweller_accounts_by_identity")
+                                .document("${normMobile}_${normGst}")
                                 .delete()
                                 .await()
+                        }
+
+                        // For mobile index, check if another account with the same mobile still exists
+                        if (normMobile.isNotEmpty()) {
+                            try {
+                                val otherAccounts = fs.collection("jeweller_accounts")
+                                    .whereEqualTo("mobileNumber", normMobile)
+                                    .get()
+                                    .await()
+                                    .documents
+                                    .mapNotNull { parseDocToAccount(it) }
+                                    .filter { it.accountId != accountId }
+
+                                if (otherAccounts.isNotEmpty()) {
+                                    val remaining = otherAccounts.first()
+                                    val remMap = hashMapOf(
+                                        "accountId" to remaining.accountId,
+                                        "jewellerName" to remaining.jewellerName,
+                                        "mobileNumber" to PhoneUtil.normalizeMobile(remaining.mobileNumber),
+                                        "code4Digit" to PhoneUtil.normalizeCode(remaining.code4Digit),
+                                        "gstNumber" to PhoneUtil.normalizeGst(remaining.gstNumber),
+                                        "isLicensed" to remaining.isLicensed,
+                                        "status" to remaining.status,
+                                        "createdAt" to remaining.createdAt
+                                    )
+                                    fs.collection("jeweller_accounts_by_mobile")
+                                        .document(normMobile)
+                                        .set(remMap, SetOptions.merge())
+                                        .await()
+                                } else {
+                                    fs.collection("jeweller_accounts_by_mobile")
+                                        .document(normMobile)
+                                        .delete()
+                                        .await()
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        if (normGst.isNotEmpty()) {
+                            try {
+                                val gstDoc = fs.collection("jeweller_accounts_by_gst").document(normGst).get().await()
+                                val docAccId = gstDoc.getString("accountId")
+                                if (docAccId == accountId || !gstDoc.exists()) {
+                                    fs.collection("jeweller_accounts_by_gst")
+                                        .document(normGst)
+                                        .delete()
+                                        .await()
+                                }
+                            } catch (_: Exception) {}
                         }
                     }
                 } catch (e: Exception) {
@@ -1122,11 +1216,13 @@ class CloudSyncManager private constructor(private val context: Context) {
                 }
             }
 
-            // 2. Filter out from SharedPreferences and persistent mirror files
+            // 2. Filter out ONLY the target account from SharedPreferences and persistent mirror files
             val existing = getAllAccountsFromCloud().filter {
-                it.accountId != accountId &&
-                (normMobile.isEmpty() || PhoneUtil.normalizeMobile(it.mobileNumber) != normMobile) &&
-                (normGst.isEmpty() || PhoneUtil.normalizeGst(it.gstNumber) != normGst)
+                val matchesId = accountId.isNotBlank() && it.accountId == accountId
+                val matchesIdentity = normMobile.isNotEmpty() && normGst.isNotEmpty() &&
+                    PhoneUtil.normalizeMobile(it.mobileNumber) == normMobile &&
+                    PhoneUtil.normalizeGst(it.gstNumber) == normGst
+                !(matchesId || matchesIdentity)
             }
             val jsonArray = org.json.JSONArray()
             for (acc in existing) {
@@ -2037,18 +2133,18 @@ class CloudSyncManager private constructor(private val context: Context) {
     /**
      * Processes all queued pending sync operations when network connectivity is established
      */
-    suspend fun processPendingQueue() = withContext(Dispatchers.IO) {
+    suspend fun processPendingQueue(): Boolean = withContext(Dispatchers.IO) {
         if (!isNetworkAvailable()) {
             if (pendingQueue.isNotEmpty()) {
                 _syncStatus.value = SyncStatus.OFFLINE
             }
-            return@withContext
+            return@withContext false
         }
 
         queueMutex.withLock {
             if (pendingQueue.isEmpty()) {
                 _syncStatus.value = SyncStatus.SYNCED
-                return@withLock
+                return@withLock true
             }
 
             _syncStatus.value = SyncStatus.SYNCING
@@ -2131,6 +2227,7 @@ class CloudSyncManager private constructor(private val context: Context) {
             } else {
                 _syncStatus.value = SyncStatus.PENDING_SYNC
             }
+            pendingQueue.isEmpty()
         }
     }
 
