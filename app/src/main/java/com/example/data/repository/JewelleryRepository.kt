@@ -13,7 +13,10 @@ import com.example.data.sync.CloudSyncManager
 import com.example.data.sync.LicenceValidator
 import com.example.data.sync.SyncStatus
 import com.example.util.PhoneUtil
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +46,7 @@ class JewelleryRepository(private val context: Context) {
     private val billDao = db.billDao()
     private val stockDao = db.stockTransactionDao()
     private val cloudSync = CloudSyncManager.getInstance(context)
+    private val repoScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val sessionPrefs: SharedPreferences =
         context.getSharedPreferences("jewellery_active_session", Context.MODE_PRIVATE)
@@ -306,9 +310,76 @@ class JewelleryRepository(private val context: Context) {
         val cleanTargetMob = PhoneUtil.normalizeMobile(targetMobile)
         val cleanTargetGst = PhoneUtil.normalizeGst(targetGst)
 
-        val cloudAccounts = mutableListOf<JewellerAccount>()
+        // 1. Load all local sources FIRST (Local-First Architecture)
+        loadAllKnownAccounts()
+        val localList = mutableListOf<JewellerAccount>()
 
-        // 1. If internet is available, ALWAYS check current Firestore SERVER first
+        // In-memory cache
+        localList.addAll(accountMemoryCache.values)
+
+        // Room DB
+        try { localList.addAll(accountDao.getAllAccounts()) } catch (_: Exception) {}
+        if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
+            try { accountDao.findAccountByMobileAndGst(cleanTargetMob, cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
+        } else if (cleanTargetMob.isNotEmpty()) {
+            try { localList.addAll(accountDao.findAccountsByMobile(cleanTargetMob)) } catch (_: Exception) {}
+        } else if (cleanTargetGst.isNotEmpty()) {
+            try { accountDao.findAccountByGst(cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
+        }
+
+        // Permanent SharedPreferences
+        if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_${cleanTargetMob}_${cleanTargetGst}", null))?.let { localList.add(it) }
+        } else if (cleanTargetMob.isNotEmpty()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_$cleanTargetMob", null))?.let { localList.add(it) }
+        } else if (cleanTargetGst.isNotEmpty()) {
+            parseSingleAccountJson(permanentPrefs.getString("account_gst_$cleanTargetGst", null))?.let { localList.add(it) }
+        }
+        parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))?.let { localList.add(it) }
+        localList.addAll(getPermanentAccountsList())
+
+        for ((key, value) in permanentPrefs.all) {
+            if (key.startsWith("account_") && value is String) {
+                parseSingleAccountJson(value)?.let { localList.add(it) }
+            }
+        }
+
+        // Disk Vault files
+        val vaultFiles = listOf(
+            File(context.filesDir, "jeweller_accounts_vault.json"),
+            File(context.cacheDir, "jeweller_accounts_vault.json"),
+            context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
+        )
+        for (f in vaultFiles) {
+            if (f != null && f.exists()) {
+                try { localList.addAll(parseAccountsArrayJson(f.readText())) } catch (_: Exception) {}
+            }
+        }
+
+        // CloudSync local persistent mirror
+        localList.addAll(cloudSync.getLocalMirroredAccounts())
+
+        val localDistinct = localList.distinctBy {
+            PhoneUtil.normalizeMobile(it.mobileNumber) + "|" + PhoneUtil.normalizeGst(it.gstNumber)
+        }
+
+        // If target parameters are specified and matching local accounts are found, return immediately without network blocking
+        val matchingLocal = if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
+            localDistinct.filter {
+                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanTargetMob && PhoneUtil.normalizeGst(it.gstNumber) == cleanTargetGst
+            }
+        } else if (cleanTargetMob.isNotEmpty()) {
+            localDistinct.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanTargetMob }
+        } else {
+            emptyList()
+        }
+
+        if (matchingLocal.isNotEmpty()) {
+            return@withContext matchingLocal
+        }
+
+        // 2. If no local matches and internet is available, check Firestore
+        val cloudAccounts = mutableListOf<JewellerAccount>()
         if (cloudSync.isNetworkAvailable()) {
             if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
                 try {
@@ -352,60 +423,8 @@ class JewelleryRepository(private val context: Context) {
             }
         }
 
-        // 2. Load all local sources
-        loadAllKnownAccounts()
-        val localList = mutableListOf<JewellerAccount>()
-
-        // In-memory cache
-        localList.addAll(accountMemoryCache.values)
-
-        // Room DB
-        try { localList.addAll(accountDao.getAllAccounts()) } catch (_: Exception) {}
-        if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
-            try { accountDao.findAccountByMobileAndGst(cleanTargetMob, cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
-        } else if (cleanTargetMob.isNotEmpty()) {
-            try { accountDao.findAccountByMobile(cleanTargetMob)?.let { localList.add(it) } } catch (_: Exception) {}
-        } else if (cleanTargetGst.isNotEmpty()) {
-            try { accountDao.findAccountByGst(cleanTargetGst)?.let { localList.add(it) } } catch (_: Exception) {}
-        }
-
-        // Permanent SharedPreferences
-        if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
-            parseSingleAccountJson(permanentPrefs.getString("account_${cleanTargetMob}_${cleanTargetGst}", null))?.let { localList.add(it) }
-        } else if (cleanTargetMob.isNotEmpty()) {
-            parseSingleAccountJson(permanentPrefs.getString("account_$cleanTargetMob", null))?.let { localList.add(it) }
-        } else if (cleanTargetGst.isNotEmpty()) {
-            parseSingleAccountJson(permanentPrefs.getString("account_gst_$cleanTargetGst", null))?.let { localList.add(it) }
-        }
-        parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))?.let { localList.add(it) }
-        localList.addAll(getPermanentAccountsList())
-
-        for ((key, value) in permanentPrefs.all) {
-            if (key.startsWith("account_") && value is String) {
-                parseSingleAccountJson(value)?.let { localList.add(it) }
-            }
-        }
-
-        // Disk Vault files
-        val vaultFiles = listOf(
-            File(context.filesDir, "jeweller_accounts_vault.json"),
-            File(context.cacheDir, "jeweller_accounts_vault.json"),
-            context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
-        )
-        for (f in vaultFiles) {
-            if (f != null && f.exists()) {
-                try { localList.addAll(parseAccountsArrayJson(f.readText())) } catch (_: Exception) {}
-            }
-        }
-
-        // CloudSync local persistent mirror
-        localList.addAll(cloudSync.getLocalMirroredAccounts())
-
-        // 3. Merge: PREFER CURRENT FIRESTORE CLOUD ACCOUNTS OVER STALE LOCAL ACCOUNTS
-        // Key by complete identity: normalizedMobile + "|" + normalizedGST
+        // 3. Merge:
         val mergedMap = LinkedHashMap<String, JewellerAccount>()
-
-        // Insert cloud accounts first so they are preferred
         for (acc in cloudAccounts) {
             val identity = PhoneUtil.normalizeMobile(acc.mobileNumber) + "|" + PhoneUtil.normalizeGst(acc.gstNumber)
             if (identity.isNotBlank() && identity != "|" && !mergedMap.containsKey(identity)) {
@@ -413,7 +432,6 @@ class JewelleryRepository(private val context: Context) {
             }
         }
 
-        // Add local accounts only if not already provided by cloud, sorted newest created first
         val sortedLocal = localList.sortedByDescending { it.createdAt }
         for (acc in sortedLocal) {
             val identity = PhoneUtil.normalizeMobile(acc.mobileNumber) + "|" + PhoneUtil.normalizeGst(acc.gstNumber)
@@ -426,7 +444,6 @@ class JewelleryRepository(private val context: Context) {
             PhoneUtil.normalizeMobile(it.mobileNumber) + "|" + PhoneUtil.normalizeGst(it.gstNumber)
         }
 
-        // Prioritize targetMobile / targetGst if provided
         return@withContext if (cleanTargetMob.isNotEmpty() && cleanTargetGst.isNotEmpty()) {
             result.sortedByDescending {
                 PhoneUtil.normalizeMobile(it.mobileNumber) == cleanTargetMob && PhoneUtil.normalizeGst(it.gstNumber) == cleanTargetGst
@@ -493,6 +510,16 @@ class JewelleryRepository(private val context: Context) {
             }
 
             var account: JewellerAccount? = accountDao.getAccountById(savedAccountId)
+
+            if (account == null) {
+                account = accountMemoryCache.values.firstOrNull { it.accountId == savedAccountId }
+            }
+            if (account == null) {
+                account = getPermanentAccountsList().firstOrNull { it.accountId == savedAccountId }
+            }
+            if (account == null) {
+                account = cloudSync.getLocalMirroredAccounts().firstOrNull { it.accountId == savedAccountId }
+            }
 
             if (account == null) {
                 val savedMobile = sessionPrefs.getString("logged_in_mobile", null)
@@ -663,6 +690,8 @@ class JewelleryRepository(private val context: Context) {
      * Login using Mobile Number (+ optional GST No.) + 4-Digit Code.
      * Enforces Single Account Identity Rule:
      * - Mobile Number is normalized to 10 digits
+     * - GST Number is normalized to uppercase 15 chars (if provided)
+     * - Local persistent data is checked FIRST and immediately before any network call
      * - 4-Digit Code is verified against the registered code
      * - Stock transactions and bills are adopted to prevent any data loss
      */
@@ -682,116 +711,302 @@ class JewelleryRepository(private val context: Context) {
             var matchedAccount: JewellerAccount? = null
 
             if (cleanGst.isNotBlank()) {
-                // When GST is NOT blank:
-                // FIRST find exact Mobile + GST in strict order:
-                // 1) accountDao.findAccountByMobileAndGst(cleanMobile, cleanGst)
+                // ========================================================
+                // 1. EXACT MOBILE + GST LOOKUP (LOCAL FIRST)
+                // ========================================================
+
+                // A. Room exact Mobile + GST
                 try {
                     val roomAcc = accountDao.findAccountByMobileAndGst(cleanMobile, cleanGst)
                     if (roomAcc != null &&
                         PhoneUtil.normalizeMobile(roomAcc.mobileNumber) == cleanMobile &&
                         PhoneUtil.normalizeGst(roomAcc.gstNumber) == cleanGst
                     ) {
+                        Log.i("JewelleryRepository", "LOGIN_LOOKUP: ROOM_FOUND ($cleanMobile, $cleanGst)")
                         matchedAccount = roomAcc
                     }
                 } catch (e: Exception) {
                     Log.w("JewelleryRepository", "Room findAccountByMobileAndGst error: ${e.message}")
                 }
 
-                // 2) cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
+                // B. SharedPreferences exact Mobile + GST
                 if (matchedAccount == null) {
                     try {
-                        val cloudRes = cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
-                        if (cloudRes is CloudSyncManager.CloudLookupResult.Found) {
-                            val cloudAcc = cloudRes.account
-                            if (PhoneUtil.normalizeMobile(cloudAcc.mobileNumber) == cleanMobile &&
-                                PhoneUtil.normalizeGst(cloudAcc.gstNumber) == cleanGst
-                            ) {
-                                matchedAccount = cloudAcc
-                                saveAccountPermanently(cloudAcc)
-                            }
+                        val directJson = permanentPrefs.getString("account_${cleanMobile}_${cleanGst}", null)
+                        val prefAcc = parseSingleAccountJson(directJson)
+                        if (prefAcc != null &&
+                            PhoneUtil.normalizeMobile(prefAcc.mobileNumber) == cleanMobile &&
+                            PhoneUtil.normalizeGst(prefAcc.gstNumber) == cleanGst
+                        ) {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: LOCAL_PREF_FOUND ($cleanMobile, $cleanGst)")
+                            matchedAccount = prefAcc
                         }
                     } catch (e: Exception) {
-                        Log.w("JewelleryRepository", "Cloud findAccountByMobileAndGstInCloud error: ${e.message}")
+                        Log.w("JewelleryRepository", "Pref lookup error: ${e.message}")
                     }
                 }
 
-                // 3) getAllCandidateAccounts(cleanMobile, cleanGst)
+                // C. registered_accounts_list
                 if (matchedAccount == null) {
                     try {
-                        val candidates = getAllCandidateAccounts(cleanMobile, cleanGst)
-                        matchedAccount = candidates.firstOrNull {
+                        val regAcc = getPermanentAccountsList().firstOrNull {
                             PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
                             PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
                         }
+                        if (regAcc != null) {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: LOCAL_REGISTRY_FOUND ($cleanMobile, $cleanGst)")
+                            matchedAccount = regAcc
+                        }
                     } catch (e: Exception) {
-                        Log.w("JewelleryRepository", "getAllCandidateAccounts error: ${e.message}")
+                        Log.w("JewelleryRepository", "Registry list lookup error: ${e.message}")
                     }
                 }
 
-                // 4) Fallback: last registered account (ONLY if exact mobile and exact GST match)
+                // D. local persistent mirror
                 if (matchedAccount == null) {
-                    val lastAcc = parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))
-                    if (lastAcc != null &&
-                        PhoneUtil.normalizeMobile(lastAcc.mobileNumber) == cleanMobile &&
-                        PhoneUtil.normalizeGst(lastAcc.gstNumber) == cleanGst
-                    ) {
-                        matchedAccount = lastAcc
+                    try {
+                        val mirrorAcc = cloudSync.getLocalMirroredAccounts().firstOrNull {
+                            PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
+                            PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+                        }
+                        if (mirrorAcc != null) {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: LOCAL_MIRROR_FOUND ($cleanMobile, $cleanGst)")
+                            matchedAccount = mirrorAcc
+                        }
+                    } catch (e: Exception) {
+                        Log.w("JewelleryRepository", "Mirror lookup error: ${e.message}")
                     }
                 }
 
-                // If exact Mobile + GST cannot be found:
+                // E. vault/disk backup
                 if (matchedAccount == null) {
-                    return@withContext AuthResult.Error(
-                        loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
-                    )
-                }
-            } else {
-                // 2. GST-BLANK BACKWARD COMPATIBILITY
-                // Only when GST is genuinely blank may the existing mobile-only lookup be used.
-                matchedAccount = findAccountEverywhereByMobile(cleanMobile)
-
-                if (matchedAccount == null) {
-                    val candidates = getAllCandidateAccounts(cleanMobile, "")
-                    matchedAccount = candidates.firstOrNull {
-                        PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile
+                    try {
+                        val vaultFiles = listOf(
+                            File(context.filesDir, "jeweller_accounts_vault.json"),
+                            File(context.cacheDir, "jeweller_accounts_vault.json"),
+                            context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
+                        )
+                        for (f in vaultFiles) {
+                            if (f != null && f.exists()) {
+                                val acc = parseAccountsArrayJson(f.readText()).firstOrNull {
+                                    PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
+                                    PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+                                }
+                                if (acc != null) {
+                                    Log.i("JewelleryRepository", "LOGIN_LOOKUP: VAULT_FOUND ($cleanMobile, $cleanGst)")
+                                    matchedAccount = acc
+                                    break
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w("JewelleryRepository", "Vault lookup error: ${e.message}")
                     }
                 }
 
+                // F. memory cache
                 if (matchedAccount == null) {
-                    val lastRegMob = PhoneUtil.normalizeMobile(
-                        permanentPrefs.getString("last_registered_mobile", null)
-                            ?: sessionPrefs.getString("last_mobile_number", null)
-                    )
-                    if (lastRegMob == cleanMobile) {
-                        val lastAcc = parseSingleAccountJson(permanentPrefs.getString("last_registered_account", null))
-                        if (lastAcc != null && PhoneUtil.normalizeMobile(lastAcc.mobileNumber) == cleanMobile) {
-                            matchedAccount = lastAcc
+                    val memAcc = accountMemoryCache[getAccountIdentityKey(cleanMobile, cleanGst)]
+                        ?: accountMemoryCache.values.firstOrNull {
+                            PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
+                            PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+                        }
+                    if (memAcc != null) {
+                        Log.i("JewelleryRepository", "LOGIN_LOOKUP: MEMORY_FOUND ($cleanMobile, $cleanGst)")
+                        matchedAccount = memAcc
+                    }
+                }
+
+                // G & H: Only if NO local store contains this account, query Cloud
+                if (matchedAccount == null) {
+                    val cloudRes = cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
+                    when (cloudRes) {
+                        is CloudSyncManager.CloudLookupResult.Found -> {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_FOUND (${cloudRes.account.accountId})")
+                            matchedAccount = cloudRes.account
+                            saveAccountPermanently(cloudRes.account)
+                        }
+                        is CloudSyncManager.CloudLookupResult.Timeout -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_TIMEOUT")
+                            return@withContext AuthResult.Error(
+                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                            )
+                        }
+                        is CloudSyncManager.CloudLookupResult.NetworkError -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
+                            return@withContext AuthResult.Error(
+                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                            )
+                        }
+                        is CloudSyncManager.CloudLookupResult.Error -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: CLOUD_ERROR: ${cloudRes.message}")
+                            if (!cloudSync.isNetworkAvailable()) {
+                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
+                                return@withContext AuthResult.Error(
+                                    loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                )
+                            } else {
+                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                                return@withContext AuthResult.Error(
+                                    loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                                )
+                            }
+                        }
+                        is CloudSyncManager.CloudLookupResult.NotFound -> {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                            return@withContext AuthResult.Error(
+                                loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                            )
                         }
                     }
                 }
+            } else {
+                // ========================================================
+                // 2. GST-BLANK LOGIN (Collect candidates from all local stores first)
+                // ========================================================
+                val localCandidates = mutableListOf<JewellerAccount>()
 
-                if (matchedAccount == null) {
-                    return@withContext AuthResult.Error(
-                        loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
+                // Room
+                try {
+                    val roomList = accountDao.findAccountsByMobile(cleanMobile)
+                    localCandidates.addAll(roomList.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+                } catch (e: Exception) {
+                    Log.w("JewelleryRepository", "Room findAccountsByMobile error: ${e.message}")
+                }
+
+                // SharedPreferences
+                try {
+                    parseSingleAccountJson(permanentPrefs.getString("account_$cleanMobile", null))?.let {
+                        if (PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile) localCandidates.add(it)
+                    }
+                    for ((key, value) in permanentPrefs.all) {
+                        if (key.startsWith("account_${cleanMobile}_") && value is String) {
+                            parseSingleAccountJson(value)?.let {
+                                if (PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile) localCandidates.add(it)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("JewelleryRepository", "Pref mobile candidates error: ${e.message}")
+                }
+
+                // registered_accounts_list
+                try {
+                    localCandidates.addAll(getPermanentAccountsList().filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+                } catch (_: Exception) {}
+
+                // Local mirror
+                try {
+                    localCandidates.addAll(cloudSync.getLocalMirroredAccounts().filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+                } catch (_: Exception) {}
+
+                // Vault
+                try {
+                    val vaultFiles = listOf(
+                        File(context.filesDir, "jeweller_accounts_vault.json"),
+                        File(context.cacheDir, "jeweller_accounts_vault.json"),
+                        context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
                     )
+                    for (f in vaultFiles) {
+                        if (f != null && f.exists()) {
+                            localCandidates.addAll(parseAccountsArrayJson(f.readText()).filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // Memory cache
+                localCandidates.addAll(accountMemoryCache.values.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+
+                // Deduplicate local candidates by identity: normalizedMobile + "|" + normalizedGst
+                val distinctLocal = localCandidates.distinctBy {
+                    PhoneUtil.normalizeMobile(it.mobileNumber) + "|" + PhoneUtil.normalizeGst(it.gstNumber)
+                }
+
+                if (distinctLocal.size > 1) {
+                    // More than 1 distinct account with different GSTs!
+                    Log.w("JewelleryRepository", "LOGIN_LOOKUP: MULTIPLE_ACCOUNTS_REQUIRE_GST (${distinctLocal.size} accounts for $cleanMobile)")
+                    return@withContext AuthResult.Error(
+                        loc("Multiple accounts found for this Mobile Number. Please enter GST No.", "આ મોબાઈલ નંબર માટે એકથી વધુ એકાઉન્ટ મળ્યા છે. કૃપા કરીને GST નંબર દાખલ કરો.")
+                    )
+                } else if (distinctLocal.size == 1) {
+                    Log.i("JewelleryRepository", "LOGIN_LOOKUP: LOCAL_SINGLE_FOUND (${distinctLocal.first().jewellerName})")
+                    matchedAccount = distinctLocal.first()
+                } else {
+                    // 0 local accounts found, check Cloud
+                    val cloudRes = cloudSync.findAccountsByMobileInCloud(cleanMobile)
+                    when (cloudRes) {
+                        is CloudSyncManager.CloudMobileLookupResult.FoundSingle -> {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_FOUND (${cloudRes.account.accountId})")
+                            matchedAccount = cloudRes.account
+                            saveAccountPermanently(cloudRes.account)
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.FoundMultiple -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: MULTIPLE_ACCOUNTS_REQUIRE_GST")
+                            return@withContext AuthResult.Error(
+                                loc("Multiple accounts found for this Mobile Number. Please enter GST No.", "આ મોબાઈલ નંબર માટે એકથી વધુ એકાઉન્ટ મળ્યા છે. કૃપા કરીને GST નંબર દાખલ કરો.")
+                            )
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.Timeout -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_TIMEOUT")
+                            return@withContext AuthResult.Error(
+                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                            )
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.NetworkError -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
+                            return@withContext AuthResult.Error(
+                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                            )
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.Error -> {
+                            if (!cloudSync.isNetworkAvailable()) {
+                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
+                                return@withContext AuthResult.Error(
+                                    loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                )
+                            } else {
+                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                                return@withContext AuthResult.Error(
+                                    loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
+                                )
+                            }
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.NotFound -> {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                            return@withContext AuthResult.Error(
+                                loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
+                            )
+                        }
+                    }
                 }
             }
 
-            // Verify 4-digit code ONLY (strictly remove 2330 / M30P23 owner bypass)
+            if (matchedAccount == null) {
+                Log.w("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                return@withContext AuthResult.Error(
+                    if (cleanGst.isNotBlank()) {
+                        loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                    } else {
+                        loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
+                    }
+                )
+            }
+
+            // ========================================================
+            // 3. VERIFY 4-DIGIT CODE
+            // ========================================================
             val storedCode = PhoneUtil.normalizeCode(matchedAccount.code4Digit)
             if (storedCode.isNotEmpty() && cleanCode != storedCode) {
+                Log.i("JewelleryRepository", "LOGIN_LOOKUP: WRONG_CODE")
                 return@withContext AuthResult.Error(loc("Incorrect 4-Digit Code.", "૪ અંકનો સિક્યુરિટી કોડ ખોટો છે."))
             }
 
-            // Login succeeds: restore session and local data WITHOUT mutating the registered code or overwriting GST
+            // ========================================================
+            // 4. RESTORE SESSION & ADOPT DATA (WITHOUT NETWORK BLOCKING)
+            // ========================================================
             saveAccountPermanently(matchedAccount)
             adoptOrphanData(matchedAccount.accountId)
-
-            try {
-                cloudSync.restoreFullAccountFromCloud(matchedAccount.accountId)
-            } catch (e: Exception) {
-                Log.w("JewelleryRepository", "restoreFullAccountFromCloud skipped: ${e.message}")
-            }
 
             sessionPrefs.edit()
                 .putString("logged_in_account_id", matchedAccount.accountId)
@@ -804,7 +1019,17 @@ class JewelleryRepository(private val context: Context) {
                 .commit()
 
             _currentAccount.value = matchedAccount
-            cloudSync.startPeriodicAutoSync(matchedAccount.accountId)
+
+            val targetAccountId = matchedAccount.accountId
+            repoScope.launch {
+                try {
+                    cloudSync.restoreFullAccountFromCloud(targetAccountId)
+                } catch (e: Exception) {
+                    Log.w("JewelleryRepository", "Async restoreFullAccountFromCloud skipped: ${e.message}")
+                }
+                cloudSync.startPeriodicAutoSync(targetAccountId)
+            }
+
             return@withContext AuthResult.Success(matchedAccount)
         }
     }
@@ -842,8 +1067,17 @@ class JewelleryRepository(private val context: Context) {
 
         if (account == null) {
             val result = cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
-            if (result is CloudSyncManager.CloudLookupResult.Found) {
-                account = result.account
+            when (result) {
+                is CloudSyncManager.CloudLookupResult.Found -> {
+                    account = result.account
+                }
+                is CloudSyncManager.CloudLookupResult.Timeout,
+                is CloudSyncManager.CloudLookupResult.NetworkError -> {
+                    return@withContext AuthResult.Error(
+                        loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                    )
+                }
+                else -> { /* Account truly not found */ }
             }
         }
 

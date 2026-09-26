@@ -20,6 +20,9 @@ interface JewellerAccountDao {
     @Query("SELECT * FROM jeweller_accounts WHERE TRIM(mobileNumber) = TRIM(:mobile) OR mobileNumber = :mobile OR mobileNumber LIKE '%' || :mobile LIMIT 1")
     suspend fun findAccountByMobile(mobile: String): JewellerAccount?
 
+    @Query("SELECT * FROM jeweller_accounts WHERE TRIM(mobileNumber) = TRIM(:mobile) OR mobileNumber = :mobile OR mobileNumber LIKE '%' || :mobile")
+    suspend fun findAccountsByMobile(mobile: String): List<JewellerAccount>
+
     @Query("SELECT * FROM jeweller_accounts WHERE LOWER(TRIM(jewellerName)) = LOWER(TRIM(:name)) LIMIT 1")
     suspend fun findAccountByName(name: String): JewellerAccount?
 

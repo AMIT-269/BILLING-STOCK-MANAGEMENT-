@@ -88,6 +88,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_6 = object : Migration(2, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                ensureGstColumn(database)
+                ensurePaymentsJsonColumn(database)
+            }
+        }
+
         val MIGRATION_1_6 = object : Migration(1, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 ensureGstColumn(database)
@@ -102,12 +109,17 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "jewellery_billing_database"
                 )
-                    .addMigrations(MIGRATION_1_6, MIGRATION_3_6, MIGRATION_4_6, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_6, MIGRATION_2_6, MIGRATION_3_6, MIGRATION_4_6, MIGRATION_5_6)
                     .addCallback(object : RoomDatabase.Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) {
                             super.onOpen(db)
                             ensureGstColumn(db)
                             ensurePaymentsJsonColumn(db)
+                        }
+
+                        override fun onDestructiveMigration(db: SupportSQLiteDatabase) {
+                            super.onDestructiveMigration(db)
+                            android.util.Log.w("AppDatabase", "onDestructiveMigration triggered - existing accounts are preserved in SharedPreferences and vault files")
                         }
                     })
                     .fallbackToDestructiveMigration()

@@ -536,5 +536,159 @@ class ExampleRobolectricTest {
     assertEquals("Kishorbhai Prajapati", billsAfterEdit[0].partyName)
     assertEquals(36000.0, billsAfterEdit[0].grandTotal, 0.001)
   }
+
+  @Test
+  fun `verify two accounts with same mobile and different GST enforce GST on login and authenticate separately`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+
+    val mobile = "9876500001"
+    val gstA = "24AAAAA1111A1Z1"
+    val gstB = "24BBBBB2222B2Z2"
+
+    // Register Account A
+    val regA = repo.registerNewJeweller(
+      name = "Shop Alpha",
+      mobile = mobile,
+      code = "1111",
+      confirmCode = "1111",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = gstA
+    )
+    assertTrue("Registration A should succeed", regA is AuthResult.Success)
+    val accountA = (regA as AuthResult.Success).account
+    assertEquals("Shop Alpha", accountA.jewellerName)
+
+    // Register Account B with same mobile but different GST
+    val regB = repo.registerNewJeweller(
+      name = "Shop Beta",
+      mobile = mobile,
+      code = "2222",
+      confirmCode = "2222",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = gstB
+    )
+    assertTrue("Registration B should succeed", regB is AuthResult.Success)
+    val accountB = (regB as AuthResult.Success).account
+    assertEquals("Shop Beta", accountB.jewellerName)
+    org.junit.Assert.assertNotEquals(accountA.accountId, accountB.accountId)
+
+    // Logout
+    repo.logout()
+
+    // 1. Attempt login with mobile only: MUST require GST, never guess!
+    val mobileOnlyLogin = repo.login(mobile, "", "1111")
+    assertTrue("Mobile-only login must fail when multiple accounts exist", mobileOnlyLogin is AuthResult.Error)
+    val errorMsg = (mobileOnlyLogin as AuthResult.Error).message
+    assertTrue("Error message must mention GST requirement", errorMsg.contains("GST") || errorMsg.contains("જીએસટી"))
+
+    // 2. Login with Mobile + GST A
+    val loginA = repo.login(mobile, gstA, "1111")
+    assertTrue("Login A with Mobile + GST A should succeed", loginA is AuthResult.Success)
+    val loggedInA = (loginA as AuthResult.Success).account
+    assertEquals("Shop Alpha", loggedInA.jewellerName)
+    assertEquals(gstA, loggedInA.gstNumber)
+
+    repo.logout()
+
+    // 3. Login with Mobile + GST B
+    val loginB = repo.login(mobile, gstB, "2222")
+    assertTrue("Login B with Mobile + GST B should succeed", loginB is AuthResult.Success)
+    val loggedInB = (loginB as AuthResult.Success).account
+    assertEquals("Shop Beta", loggedInB.jewellerName)
+    assertEquals(gstB, loggedInB.gstNumber)
+  }
+
+  @Test
+  fun `verify wrong 4-digit code does not trigger mobile not registered`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+
+    val mobile = "9876500002"
+    val gst = "24CCCCC3333C3Z3"
+
+    val reg = repo.registerNewJeweller(
+      name = "Test Security Shop",
+      mobile = mobile,
+      code = "4444",
+      confirmCode = "4444",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = gst
+    )
+    assertTrue(reg is AuthResult.Success)
+
+    repo.logout()
+
+    // Login with wrong code
+    val wrongCodeLogin = repo.login(mobile, gst, "9999")
+    assertTrue(wrongCodeLogin is AuthResult.Error)
+    val msg = (wrongCodeLogin as AuthResult.Error).message
+    assertTrue("Must report incorrect code", msg.contains("Code") || msg.contains("કોડ"))
+    assertFalse("Must NOT report not registered", msg.contains("Not Registered") || msg.contains("રજીસ્ટર્ડ નથી"))
+  }
+
+  @Test
+  fun `verify same jeweller name with different mobile and GST creates separate accounts and preserves bills across sessions`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+    val db = com.example.data.local.AppDatabase.getDatabase(context)
+
+    val shopName = "Kalyan Jewellers"
+
+    // Account 1
+    val reg1 = repo.registerNewJeweller(
+      name = shopName,
+      mobile = "9876500003",
+      code = "1234",
+      confirmCode = "1234",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = "24DDDDD4444D4Z4"
+    )
+    assertTrue(reg1 is AuthResult.Success)
+    val acc1 = (reg1 as AuthResult.Success).account
+
+    // Account 2 (same name, different branch)
+    val reg2 = repo.registerNewJeweller(
+      name = shopName,
+      mobile = "9876500004",
+      code = "5678",
+      confirmCode = "5678",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = "24EEEEE5555E5Z5"
+    )
+    assertTrue(reg2 is AuthResult.Success)
+    val acc2 = (reg2 as AuthResult.Success).account
+
+    org.junit.Assert.assertNotEquals(acc1.accountId, acc2.accountId)
+
+    // Create a bill for Account 1
+    val bill1 = com.example.data.model.Bill(
+      id = "bill_acc1_001",
+      accountId = acc1.accountId,
+      billNumber = "KJ-0001",
+      billType = "SALE",
+      partyName = "Customer One",
+      partyMobile = "9800000001",
+      paymentMode = "CASH",
+      subtotal = 50000.0,
+      grandTotal = 50000.0,
+      cashReceivedOrPaid = 50000.0
+    )
+    repo.createBill(bill1)
+
+    // Logout and log back in as Account 1
+    repo.logout()
+    val login1 = repo.login("9876500003", "24DDDDD4444D4Z4", "1234")
+    assertTrue(login1 is AuthResult.Success)
+
+    // Bills for Account 1 must be present
+    val bills1 = db.billDao().getAllBillsDirect(acc1.accountId)
+    assertEquals(1, bills1.size)
+    assertEquals("bill_acc1_001", bills1[0].id)
+
+    // Bills for Account 2 must be 0
+    val bills2 = db.billDao().getAllBillsDirect(acc2.accountId)
+    assertEquals(0, bills2.size)
+  }
 }
 
