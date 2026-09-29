@@ -1100,8 +1100,8 @@ class JewelleryRepository(private val context: Context) {
                             }
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Mobile Number Not Registered. Please click 'New Registration' below to create an account.",
-                                    "મોબાઈલ નંબર રજીસ્ટર્ડ નથી. કૃપા કરીને નીચે 'નવું રજીસ્ટ્રેશન' પર ક્લિક કરી એકાઉન્ટ બનાવો."
+                                    "Account verification failed due to a network error. Please check your connection and try again.",
+                                    "નેટવર્કની સમસ્યાને કારણે એકાઉન્ટ ચકાસી શકાયું નથી. કૃપા કરીને તમારું કનેક્શન તપાસો અને ફરી પ્રયાસ કરો."
                                 )
                             )
                         }
