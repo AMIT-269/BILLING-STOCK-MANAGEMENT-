@@ -40,7 +40,7 @@ fun LoginScreen(
     var codeVisible by remember { mutableStateOf(false) }
     var knownAccountName by remember { mutableStateOf<String?>(null) }
 
-    // Refresh credentials on launch / resume and check if account exists
+    // Refresh credentials on launch / resume
     LaunchedEffect(Unit) {
         val creds = viewModel.getLastCredentialsTriple()
         val cleanMob = PhoneUtil.normalizeMobile(creds.second)
@@ -51,23 +51,13 @@ fun LoginScreen(
         if (gstNumber.isBlank() && cleanGst.isNotBlank()) {
             gstNumber = cleanGst
         }
-        val targetMob = if (mobileNumber.isNotBlank()) mobileNumber else cleanMob
-        if (targetMob.length == 10) {
-            val acc = viewModel.findAccountByMobile(targetMob)
-            if (acc != null) {
-                knownAccountName = acc.jewellerName
-                if (gstNumber.isBlank() && acc.gstNumber.isNotBlank()) {
-                    gstNumber = PhoneUtil.normalizeGst(acc.gstNumber)
-                }
-            }
-        }
     }
 
-    // Dynamic account detection when user enters 10-digit mobile number
+    // Dynamic account detection when user enters 10-digit mobile number (Local-Only, No Network)
     LaunchedEffect(mobileNumber) {
         val clean = PhoneUtil.normalizeMobile(mobileNumber)
         if (clean.length == 10) {
-            val acc = viewModel.findAccountByMobile(clean)
+            val acc = viewModel.findAccountLocalByMobile(clean)
             if (acc != null) {
                 knownAccountName = acc.jewellerName
                 if (gstNumber.isBlank() && acc.gstNumber.isNotBlank()) {

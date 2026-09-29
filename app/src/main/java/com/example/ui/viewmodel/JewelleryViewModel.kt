@@ -206,6 +206,12 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val loginMutex = kotlinx.coroutines.sync.Mutex()
 
+    suspend fun findAccountLocalByMobile(mobile: String): JewellerAccount? {
+        val cleanMob = PhoneUtil.normalizeMobile(mobile)
+        if (cleanMob.length != 10) return null
+        return repository.findAccountLocalByMobile(cleanMob)
+    }
+
     suspend fun findAccountByMobile(mobile: String): JewellerAccount? {
         val cleanMob = PhoneUtil.normalizeMobile(mobile)
         if (cleanMob.length != 10) return null

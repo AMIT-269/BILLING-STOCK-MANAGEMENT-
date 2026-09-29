@@ -455,6 +455,75 @@ class JewelleryRepository(private val context: Context) {
         }
     }
 
+    suspend fun findAccountLocalByMobile(mobile: String): JewellerAccount? = withContext(Dispatchers.IO) {
+        val cleanMobile = PhoneUtil.normalizeMobile(mobile)
+        if (cleanMobile.length != 10) return@withContext null
+
+        // 1. In-memory cache
+        val memMatches = accountMemoryCache.values.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
+        if (memMatches.isNotEmpty()) {
+            val nonBlank = memMatches.filter { PhoneUtil.normalizeGst(it.gstNumber).isNotBlank() }
+            val distinctGsts = nonBlank.map { PhoneUtil.normalizeGst(it.gstNumber) }.distinct()
+            if (distinctGsts.size <= 1) {
+                return@withContext nonBlank.firstOrNull() ?: memMatches.first()
+            }
+        }
+
+        val localCandidates = mutableListOf<JewellerAccount>()
+
+        // 2. Room DB
+        try {
+            val roomList = accountDao.findAccountsByMobile(cleanMobile)
+            localCandidates.addAll(roomList.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+            val allRoom = accountDao.getAllAccounts()
+            localCandidates.addAll(allRoom.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+        } catch (_: Exception) {}
+
+        // 3. SharedPreferences
+        try {
+            parseSingleAccountJson(permanentPrefs.getString("account_$cleanMobile", null))?.let {
+                if (PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile) localCandidates.add(it)
+            }
+            for ((key, value) in permanentPrefs.all) {
+                if (key.startsWith("account_${cleanMobile}_") && value is String) {
+                    parseSingleAccountJson(value)?.let {
+                        if (PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile) localCandidates.add(it)
+                    }
+                }
+            }
+            localCandidates.addAll(getPermanentAccountsList().filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+        } catch (_: Exception) {}
+
+        // 4. Local mirror
+        try {
+            localCandidates.addAll(cloudSync.getLocalMirroredAccounts().filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+        } catch (_: Exception) {}
+
+        // 5. Vault files
+        try {
+            val vaultFiles = listOf(
+                File(context.filesDir, "jeweller_accounts_vault.json"),
+                File(context.cacheDir, "jeweller_accounts_vault.json"),
+                context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jeweller_accounts_vault.json") }
+            )
+            for (f in vaultFiles) {
+                if (f != null && f.exists()) {
+                    localCandidates.addAll(parseAccountsArrayJson(f.readText()).filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+                }
+            }
+        } catch (_: Exception) {}
+
+        val distinct = localCandidates.distinctBy {
+            PhoneUtil.normalizeGst(it.gstNumber).ifEmpty { it.accountId }
+        }
+        val nonBlank = distinct.filter { PhoneUtil.normalizeGst(it.gstNumber).isNotBlank() }
+        val distinctGsts = nonBlank.map { PhoneUtil.normalizeGst(it.gstNumber) }.distinct()
+        if (distinctGsts.size > 1) {
+            return@withContext null
+        }
+        return@withContext nonBlank.maxByOrNull { it.createdAt } ?: distinct.firstOrNull()
+    }
+
     suspend fun findAccountEverywhereByMobile(mobile: String): JewellerAccount? = withContext(Dispatchers.IO) {
         val cleanMobile = PhoneUtil.normalizeMobile(mobile)
         if (cleanMobile.length != 10) return@withContext null
@@ -836,21 +905,39 @@ class JewelleryRepository(private val context: Context) {
                             saveAccountPermanently(cloudRes.account)
                         }
                         is CloudSyncManager.CloudLookupResult.Timeout -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_TIMEOUT")
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc(
+                                    "Verification timed out. Cloud service is taking too long to respond. Please try again.",
+                                    "ચકાસણીનો સમય સમાપ્ત થયો. ક્લાઉડ સેવા પ્રતિસાદ આપવામાં ઘણો સમય લઈ રહી છે. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                )
                             )
                         }
                         is CloudSyncManager.CloudLookupResult.NetworkError -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc(
+                                    "Unable to verify account: No internet connection. Please check your network and try again.",
+                                    "એકાઉન્ટ ચકાસવામાં અસમર્થ: કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                                )
+                            )
+                        }
+                        is CloudSyncManager.CloudLookupResult.FirebaseConfigError -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIREBASE_INIT_ERROR: ${cloudRes.message}")
+                            return@withContext AuthResult.Error(
+                                loc(
+                                    "Cloud service is currently unavailable. Account not found on this device.",
+                                    "ક્લાઉડ સેવા હાલમાં અનુપલબ્ધ છે. આ ઉપકરણ પર એકાઉન્ટ મળ્યું નથી."
+                                )
                             )
                         }
                         is CloudSyncManager.CloudLookupResult.Error -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: CLOUD_ERROR: ${cloudRes.message}")
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR: ${cloudRes.message}")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc(
+                                    "Temporary cloud verification error. Please try again in a few moments.",
+                                    "કામચલાઉ ક્લાઉડ ચકાસણી ભૂલ. કૃપા કરીને થોડીવાર પછી ફરી પ્રયાસ કરો."
+                                )
                             )
                         }
                         is CloudSyncManager.CloudLookupResult.NotFound -> {
@@ -872,6 +959,8 @@ class JewelleryRepository(private val context: Context) {
                 try {
                     val roomList = accountDao.findAccountsByMobile(cleanMobile)
                     localCandidates.addAll(roomList.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
+                    val allRoom = accountDao.getAllAccounts()
+                    localCandidates.addAll(allRoom.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
                 } catch (e: Exception) {
                     Log.w("JewelleryRepository", "Room findAccountsByMobile error: ${e.message}")
                 }
@@ -960,24 +1049,43 @@ class JewelleryRepository(private val context: Context) {
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.Timeout -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_TIMEOUT")
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc(
+                                    "Verification timed out. Cloud service is taking too long to respond. Please try again.",
+                                    "ચકાસણીનો સમય સમાપ્ત થયો. ક્લાઉડ સેવા પ્રતિસાદ આપવામાં ઘણો સમય લઈ રહી છે. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                )
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.NetworkError -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc(
+                                    "Unable to verify account: No internet connection. Please check your network and try again.",
+                                    "એકાઉન્ટ ચકાસવામાં અસમર્થ: કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                                )
+                            )
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.FirebaseConfigError -> {
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIREBASE_INIT_ERROR: ${cloudRes.message}")
+                            return@withContext AuthResult.Error(
+                                loc(
+                                    "Cloud service is currently unavailable. Mobile number not registered on this device.",
+                                    "ક્લાઉડ સેવા હાલમાં અનુપલબ્ધ છે. આ ઉપકરણ પર મોબાઈલ નંબર રજીસ્ટર્ડ નથી."
+                                )
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.Error -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: CLOUD_ERROR: ${cloudRes.message}")
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR: ${cloudRes.message}")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc(
+                                    "Temporary cloud verification error. Please try again in a few moments.",
+                                    "કામચલાઉ ક્લાઉડ ચકાસણી ભૂલ. કૃપા કરીને થોડીવાર પછી ફરી પ્રયાસ કરો."
+                                )
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.NotFound -> {
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
                             Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
                             return@withContext AuthResult.Error(
                                 loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
@@ -1076,13 +1184,39 @@ class JewelleryRepository(private val context: Context) {
                 is CloudSyncManager.CloudLookupResult.Found -> {
                     account = result.account
                 }
-                is CloudSyncManager.CloudLookupResult.Timeout,
-                is CloudSyncManager.CloudLookupResult.NetworkError -> {
+                is CloudSyncManager.CloudLookupResult.Timeout -> {
                     return@withContext AuthResult.Error(
-                        loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                        loc(
+                            "Verification timed out. Cloud service is taking too long to respond. Please try again.",
+                            "ચકાસણીનો સમય સમાપ્ત થયો. ક્લાઉડ સેવા પ્રતિસાદ આપવામાં ઘણો સમય લઈ રહી છે. કૃપા કરીને ફરી પ્રયાસ કરો."
+                        )
                     )
                 }
-                else -> { /* Account truly not found */ }
+                is CloudSyncManager.CloudLookupResult.NetworkError -> {
+                    return@withContext AuthResult.Error(
+                        loc(
+                            "Unable to verify account: No internet connection. Please check your network and try again.",
+                            "એકાઉન્ટ ચકાસવામાં અસમર્થ: કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                        )
+                    )
+                }
+                is CloudSyncManager.CloudLookupResult.FirebaseConfigError -> {
+                    return@withContext AuthResult.Error(
+                        loc(
+                            "Cloud service is currently unavailable. Account not found on this device.",
+                            "ક્લાઉડ સેવા હાલમાં અનુપલબ્ધ છે. આ ઉપકરણ પર એકાઉન્ટ મળ્યું નથી."
+                        )
+                    )
+                }
+                is CloudSyncManager.CloudLookupResult.Error -> {
+                    return@withContext AuthResult.Error(
+                        loc(
+                            "Temporary cloud verification error. Please try again in a few moments.",
+                            "કામચલાઉ ક્લાઉડ ચકાસણી ભૂલ. કૃપા કરીને થોડીવાર પછી ફરી પ્રયાસ કરો."
+                        )
+                    )
+                }
+                is CloudSyncManager.CloudLookupResult.NotFound -> { /* proceed to account == null check */ }
             }
         }
 

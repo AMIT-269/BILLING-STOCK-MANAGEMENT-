@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -57,12 +58,15 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     snackbarHost = { SnackbarHost(snackbarHostState) }
                 ) { innerPadding ->
                     NavHost(
                         navController = navController,
                         startDestination = "splash",
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
                     ) {
                         composable("splash") {
                             SplashScreen(

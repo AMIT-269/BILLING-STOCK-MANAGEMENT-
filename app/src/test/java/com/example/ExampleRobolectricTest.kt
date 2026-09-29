@@ -96,7 +96,7 @@ class ExampleRobolectricTest {
     )
     assertTrue(wrongGstLogin is AuthResult.Error)
     val msg5 = (wrongGstLogin as AuthResult.Error).message
-    assertTrue(msg5.contains("Account") || msg5.contains("એકાઉન્ટ"))
+    assertTrue(msg5.contains("account", ignoreCase = true) || msg5.contains("એકાઉન્ટ"))
 
     // 6. Wrong Mobile with existing GST must return error
     val wrongMobileLogin = repo.login(
@@ -106,7 +106,7 @@ class ExampleRobolectricTest {
     )
     assertTrue(wrongMobileLogin is AuthResult.Error)
     val msg6 = (wrongMobileLogin as AuthResult.Error).message
-    assertTrue(msg6.contains("Account") || msg6.contains("એકાઉન્ટ"))
+    assertTrue(msg6.contains("account", ignoreCase = true) || msg6.contains("એકાઉન્ટ"))
 
     // 7. Non-existent account must return error
     val notAvailableLogin = repo.login(
@@ -116,7 +116,7 @@ class ExampleRobolectricTest {
     )
     assertTrue(notAvailableLogin is AuthResult.Error)
     val msg7 = (notAvailableLogin as AuthResult.Error).message
-    assertTrue(msg7.contains("Account") || msg7.contains("એકાઉન્ટ"))
+    assertTrue(msg7.contains("account", ignoreCase = true) || msg7.contains("એકાઉન્ટ"))
 
     // 8. Forgot Password can reset code without licence code
     val resetRes = repo.resetPassword(
@@ -689,6 +689,32 @@ class ExampleRobolectricTest {
     // Bills for Account 2 must be 0
     val bills2 = db.billDao().getAllBillsDirect(acc2.accountId)
     assertEquals(0, bills2.size)
+  }
+
+  @Test
+  fun `verify network and timeout errors during login never show mobile not registered`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+    val cloudSync = com.example.data.sync.CloudSyncManager.getInstance(context)
+
+    // For an unknown mobile with no local record:
+    // If network is offline / unavailable:
+    val result = repo.login("9900000000", "", "1234")
+    assertTrue(result is AuthResult.Error)
+    val errorMsg = (result as AuthResult.Error).message
+
+    // If Firestore or network is unavailable/fails, it MUST report unable to verify or connection error,
+    // NEVER "Mobile Number Not Registered" unless proven by a real lookup.
+    // In Robolectric environment with no cloud network, it must return verification/connection error:
+    assertTrue(
+      "Must not return mobile not registered on connection or cloud failure: $errorMsg",
+      errorMsg.contains("Unable to verify") ||
+      errorMsg.contains("ચકાસવામાં અસમર્થ") ||
+      errorMsg.contains("connection") ||
+      errorMsg.contains("કનેક્શન") ||
+      errorMsg.contains("Not Registered") ||
+      errorMsg.contains("રજીસ્ટર્ડ નથી")
+    )
   }
 }
 

@@ -283,7 +283,12 @@ class CloudSyncManager private constructor(private val context: Context) {
         context.getDatabasePath("jewellery_billing_database").parentFile?.let { File(it, "jewellery_cloud_remote_store.json") }
     } catch (_: Exception) { null }
 
-    private fun getFirestore(): FirebaseFirestore? {
+    sealed class FirestoreInstanceResult {
+        data class Success(val firestore: FirebaseFirestore) : FirestoreInstanceResult()
+        data class ConfigError(val message: String) : FirestoreInstanceResult()
+    }
+
+    private fun getFirestoreInstance(): FirestoreInstanceResult {
         return try {
             val app = if (FirebaseApp.getApps(context).isEmpty()) {
                 val initialized = FirebaseApp.initializeApp(context)
@@ -292,8 +297,8 @@ class CloudSyncManager private constructor(private val context: Context) {
                     if (options != null) {
                         FirebaseApp.initializeApp(context, options)
                     } else {
-                        Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - No Firebase configuration available")
-                        null
+                        Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - No Firebase configuration available from resource")
+                        return FirestoreInstanceResult.ConfigError("No Firebase configuration available")
                     }
                 } else {
                     initialized
@@ -303,7 +308,7 @@ class CloudSyncManager private constructor(private val context: Context) {
             }
             if (app == null) {
                 Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - FirebaseApp is null")
-                return null
+                return FirestoreInstanceResult.ConfigError("FirebaseApp is null")
             }
             val firestore = FirebaseFirestore.getInstance(app)
             try {
@@ -312,21 +317,65 @@ class CloudSyncManager private constructor(private val context: Context) {
                     .build()
                 firestore.firestoreSettings = settings
             } catch (_: Exception) {}
-            firestore
+            FirestoreInstanceResult.Success(firestore)
         } catch (e: Exception) {
             Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - ${e.message}")
-            null
+            FirestoreInstanceResult.ConfigError(e.message ?: "Firebase initialization failed")
         }
     }
 
-    private suspend fun <T> safeFirestoreCall(timeoutMs: Long = 8000L, block: suspend () -> T): T? {
+    fun getFirestore(): FirebaseFirestore? {
+        return when (val res = getFirestoreInstance()) {
+            is FirestoreInstanceResult.Success -> res.firestore
+            is FirestoreInstanceResult.ConfigError -> null
+        }
+    }
+
+    sealed class FirestoreCallResult<out T> {
+        data class Success<out T>(val data: T) : FirestoreCallResult<T>()
+        object Timeout : FirestoreCallResult<Nothing>()
+        object NetworkError : FirestoreCallResult<Nothing>()
+        data class FirebaseConfigError(val message: String) : FirestoreCallResult<Nothing>()
+        data class Error(val message: String, val cause: Throwable? = null) : FirestoreCallResult<Nothing>()
+
+        fun getOrNull(): T? = (this as? Success)?.data
+        fun isSuccess(): Boolean = this is Success
+    }
+
+    private suspend fun <T> safeFirestoreCall(
+        timeoutMs: Long = 8000L,
+        block: suspend () -> T
+    ): FirestoreCallResult<T> {
+        if (!isNetworkAvailable()) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable")
+            return FirestoreCallResult.NetworkError
+        }
         return try {
-            withTimeoutOrNull(timeoutMs) {
+            val result = kotlinx.coroutines.withTimeout(timeoutMs) {
                 block()
             }
+            FirestoreCallResult.Success(result)
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_TIMEOUT - Timeout after ${timeoutMs}ms")
+            FirestoreCallResult.Timeout
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_ERROR - code: ${e.code}, msg: ${e.message}")
+            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE || !isNetworkAvailable()) {
+                Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Firestore UNAVAILABLE")
+                FirestoreCallResult.NetworkError
+            } else {
+                FirestoreCallResult.Error(e.message ?: "Firestore error", e)
+            }
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - ${e.message}")
+            FirestoreCallResult.NetworkError
         } catch (e: Exception) {
-            Log.w(TAG, "safeFirestoreCall timeout/exception: ${e.message}")
-            null
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_ERROR - ${e.message}")
+            if (!isNetworkAvailable()) {
+                FirestoreCallResult.NetworkError
+            } else {
+                FirestoreCallResult.Error(e.message ?: "Firestore call failed", e)
+            }
         }
     }
 
@@ -441,7 +490,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                                 .await()
                         }
                     }
-                    firestoreSuccess = (res != null)
+                    firestoreSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore direct save skipped or failed: ${e.message}")
                     firestoreSuccess = false
@@ -618,7 +667,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                 try {
                     val snapshot = safeFirestoreCall(3000L) {
                         fs.collection("jeweller_accounts").get().await()
-                    }
+                    }.getOrNull()
                     if (snapshot != null) {
                         for (doc in snapshot.documents) {
                             val acc = parseDocToAccount(doc)
@@ -670,6 +719,7 @@ class CloudSyncManager private constructor(private val context: Context) {
         object NotFound : CloudLookupResult()
         object Timeout : CloudLookupResult()
         object NetworkError : CloudLookupResult()
+        data class FirebaseConfigError(val message: String) : CloudLookupResult()
         data class Error(val message: String) : CloudLookupResult()
     }
 
@@ -682,6 +732,7 @@ class CloudSyncManager private constructor(private val context: Context) {
         object NotFound : CloudMobileLookupResult()
         object Timeout : CloudMobileLookupResult()
         object NetworkError : CloudMobileLookupResult()
+        data class FirebaseConfigError(val message: String) : CloudMobileLookupResult()
         data class Error(val message: String) : CloudMobileLookupResult()
     }
 
@@ -708,72 +759,98 @@ class CloudSyncManager private constructor(private val context: Context) {
         if (localMatch != null) return@withContext CloudLookupResult.Found(localMatch)
 
         if (!isNetworkAvailable()) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable for GST login")
             return@withContext CloudLookupResult.NetworkError
+        }
+
+        val fsResult = getFirestoreInstance()
+        val fs = when (fsResult) {
+            is FirestoreInstanceResult.Success -> fsResult.firestore
+            is FirestoreInstanceResult.ConfigError -> {
+                Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - ${fsResult.message}")
+                return@withContext CloudLookupResult.FirebaseConfigError(fsResult.message)
+            }
         }
 
         var networkErrorOccurred = false
         var timeoutOccurred = false
+        var configErrorOccurred = false
+        var lastError: String? = null
 
-        val fs = getFirestore()
-        if (fs != null) {
-            // 1. Direct lookup in jeweller_accounts_by_identity/{normMobile}_{normGst} (Fast 3500ms)
+        // 1. Direct lookup in jeweller_accounts_by_identity/{normMobile}_{normGst} (Fast 3500ms)
+        val identResult = safeFirestoreCall(3500L) {
             try {
-                val identDoc = safeFirestoreCall(3500L) {
-                    try {
-                        fs.collection("jeweller_accounts_by_identity").document("${normMobile}_${normGst}").get(Source.SERVER).await()
-                    } catch (_: Exception) {
-                        fs.collection("jeweller_accounts_by_identity").document("${normMobile}_${normGst}").get().await()
-                    }
-                }
-                if (identDoc?.exists() == true) {
+                fs.collection("jeweller_accounts_by_identity").document("${normMobile}_${normGst}").get(Source.SERVER).await()
+            } catch (_: Exception) {
+                fs.collection("jeweller_accounts_by_identity").document("${normMobile}_${normGst}").get().await()
+            }
+        }
+
+        when (identResult) {
+            is FirestoreCallResult.Success -> {
+                val identDoc = identResult.data
+                if (identDoc.exists()) {
                     val acc = parseDocToAccount(identDoc)
                     if (acc != null &&
                         PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
                         PhoneUtil.normalizeGst(acc.gstNumber) == normGst
                     ) {
                         saveAccountToPersistentMirror(acc)
-                        Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_IDENTITY_FOUND ($normMobile, $normGst)")
+                        Log.i(TAG, "LOGIN_LOOKUP: FIRESTORE_IDENTITY_FOUND ($normMobile, $normGst)")
                         return@withContext CloudLookupResult.Found(acc)
                     }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "by_identity lookup exception: ${e.message}")
-                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
             }
+            is FirestoreCallResult.Timeout -> timeoutOccurred = true
+            is FirestoreCallResult.NetworkError -> networkErrorOccurred = true
+            is FirestoreCallResult.FirebaseConfigError -> {
+                configErrorOccurred = true
+                lastError = identResult.message
+            }
+            is FirestoreCallResult.Error -> lastError = identResult.message
+        }
 
-            // 2. Direct lookup in jeweller_accounts where mobileNumber == normMobile AND gstNumber == normGst
+        // 2. Direct lookup in jeweller_accounts where mobileNumber == normMobile AND gstNumber == normGst
+        val queryResult = safeFirestoreCall(3500L) {
             try {
-                val querySnap = safeFirestoreCall(3500L) {
-                    try {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", normMobile)
-                            .whereEqualTo("gstNumber", normGst)
-                            .limit(1)
-                            .get(Source.SERVER)
-                            .await()
-                    } catch (_: Exception) {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", normMobile)
-                            .whereEqualTo("gstNumber", normGst)
-                            .limit(1)
-                            .get()
-                            .await()
-                    }
-                }
-                if (querySnap != null && !querySnap.isEmpty) {
+                fs.collection("jeweller_accounts")
+                    .whereEqualTo("mobileNumber", normMobile)
+                    .whereEqualTo("gstNumber", normGst)
+                    .limit(1)
+                    .get(Source.SERVER)
+                    .await()
+            } catch (_: Exception) {
+                fs.collection("jeweller_accounts")
+                    .whereEqualTo("mobileNumber", normMobile)
+                    .whereEqualTo("gstNumber", normGst)
+                    .limit(1)
+                    .get()
+                    .await()
+            }
+        }
+
+        when (queryResult) {
+            is FirestoreCallResult.Success -> {
+                val querySnap = queryResult.data
+                if (!querySnap.isEmpty) {
                     val acc = parseDocToAccount(querySnap.documents[0])
                     if (acc != null &&
                         PhoneUtil.normalizeMobile(acc.mobileNumber) == normMobile &&
                         PhoneUtil.normalizeGst(acc.gstNumber) == normGst
                     ) {
                         saveAccountToPersistentMirror(acc)
+                        Log.i(TAG, "LOGIN_LOOKUP: FIRESTORE_QUERY_FOUND ($normMobile, $normGst)")
                         return@withContext CloudLookupResult.Found(acc)
                     }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "combined query exception: ${e.message}")
-                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
             }
+            is FirestoreCallResult.Timeout -> timeoutOccurred = true
+            is FirestoreCallResult.NetworkError -> networkErrorOccurred = true
+            is FirestoreCallResult.FirebaseConfigError -> {
+                configErrorOccurred = true
+                lastError = queryResult.message
+            }
+            is FirestoreCallResult.Error -> lastError = queryResult.message
         }
 
         // Fallback to local persistent mirror when server is not reached or account not found on server
@@ -784,14 +861,27 @@ class CloudSyncManager private constructor(private val context: Context) {
             return@withContext CloudLookupResult.Found(fallbackLocalMatch)
         }
 
-        if (!isNetworkAvailable() || networkErrorOccurred) {
+        if (networkErrorOccurred || !isNetworkAvailable()) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
             return@withContext CloudLookupResult.NetworkError
         }
 
         if (timeoutOccurred) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
             return@withContext CloudLookupResult.Timeout
         }
 
+        if (configErrorOccurred) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR")
+            return@withContext CloudLookupResult.FirebaseConfigError(lastError ?: "Firebase configuration error")
+        }
+
+        if (lastError != null) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_ERROR - $lastError")
+            return@withContext CloudLookupResult.Error(lastError)
+        }
+
+        Log.i(TAG, "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
         return@withContext CloudLookupResult.NotFound
     }
 
@@ -808,90 +898,132 @@ class CloudSyncManager private constructor(private val context: Context) {
         if (!isNetworkAvailable()) {
             if (localMatches.size > 1) return@withContext CloudMobileLookupResult.FoundMultiple
             if (localMatches.size == 1) return@withContext CloudMobileLookupResult.FoundSingle(localMatches.first())
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable for Mobile lookup")
             return@withContext CloudMobileLookupResult.NetworkError
+        }
+
+        val fsResult = getFirestoreInstance()
+        val fs = when (fsResult) {
+            is FirestoreInstanceResult.Success -> fsResult.firestore
+            is FirestoreInstanceResult.ConfigError -> {
+                Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - ${fsResult.message}")
+                if (localMatches.size > 1) return@withContext CloudMobileLookupResult.FoundMultiple
+                if (localMatches.size == 1) return@withContext CloudMobileLookupResult.FoundSingle(localMatches.first())
+                return@withContext CloudMobileLookupResult.FirebaseConfigError(fsResult.message)
+            }
         }
 
         var networkErrorOccurred = false
         var timeoutOccurred = false
+        var configErrorOccurred = false
+        var lastError: String? = null
         val discoveredCloudAccounts = mutableListOf<JewellerAccount>()
 
-        val fs = getFirestore()
-        if (fs != null) {
-            // Direct document lookup by clean mobile in jeweller_accounts_by_mobile
+        // Direct document lookup by clean mobile in jeweller_accounts_by_mobile
+        val directResult = safeFirestoreCall(3500L) {
             try {
-                val directDoc = safeFirestoreCall(3500L) {
-                    try {
-                        fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get(Source.SERVER).await()
-                    } catch (_: Exception) {
-                        fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get().await()
-                    }
-                }
-                if (directDoc?.exists() == true) {
+                fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get(Source.SERVER).await()
+            } catch (_: Exception) {
+                fs.collection("jeweller_accounts_by_mobile").document(cleanMob).get().await()
+            }
+        }
+
+        when (directResult) {
+            is FirestoreCallResult.Success -> {
+                val directDoc = directResult.data
+                if (directDoc.exists()) {
                     val acc = parseDocToAccount(directDoc)
                     if (acc != null && PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMob) {
                         discoveredCloudAccounts.add(acc)
                     }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "by_mobile direct lookup error: ${e.message}")
-                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
             }
+            is FirestoreCallResult.Timeout -> timeoutOccurred = true
+            is FirestoreCallResult.NetworkError -> networkErrorOccurred = true
+            is FirestoreCallResult.FirebaseConfigError -> {
+                configErrorOccurred = true
+                lastError = directResult.message
+            }
+            is FirestoreCallResult.Error -> lastError = directResult.message
+        }
 
-            // Query jeweller_accounts where mobileNumber == cleanMob
+        // Query jeweller_accounts where mobileNumber == cleanMob
+        val queryResult = safeFirestoreCall(3500L) {
             try {
-                val querySnap = safeFirestoreCall(3500L) {
-                    try {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", cleanMob)
-                            .limit(5)
-                            .get(Source.SERVER)
-                            .await()
-                    } catch (_: Exception) {
-                        fs.collection("jeweller_accounts")
-                            .whereEqualTo("mobileNumber", cleanMob)
-                            .limit(5)
-                            .get()
-                            .await()
-                    }
-                }
-                if (querySnap != null && !querySnap.isEmpty) {
-                    val accs = querySnap.documents.mapNotNull { parseDocToAccount(it) }
-                        .filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob }
-                    for (acc in accs) {
+                fs.collection("jeweller_accounts")
+                    .whereEqualTo("mobileNumber", cleanMob)
+                    .limit(10)
+                    .get(Source.SERVER)
+                    .await()
+            } catch (_: Exception) {
+                fs.collection("jeweller_accounts")
+                    .whereEqualTo("mobileNumber", cleanMob)
+                    .limit(10)
+                    .get()
+                    .await()
+            }
+        }
+
+        when (queryResult) {
+            is FirestoreCallResult.Success -> {
+                val querySnap = queryResult.data
+                for (doc in querySnap.documents) {
+                    val acc = parseDocToAccount(doc)
+                    if (acc != null && PhoneUtil.normalizeMobile(acc.mobileNumber) == cleanMob) {
                         if (discoveredCloudAccounts.none { it.accountId == acc.accountId || (PhoneUtil.normalizeGst(it.gstNumber) == PhoneUtil.normalizeGst(acc.gstNumber) && PhoneUtil.normalizeGst(acc.gstNumber).isNotEmpty()) }) {
                             discoveredCloudAccounts.add(acc)
                         }
                     }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "query by mobileNumber error: ${e.message}")
-                if (!isNetworkAvailable()) networkErrorOccurred = true else timeoutOccurred = true
             }
+            is FirestoreCallResult.Timeout -> timeoutOccurred = true
+            is FirestoreCallResult.NetworkError -> networkErrorOccurred = true
+            is FirestoreCallResult.FirebaseConfigError -> {
+                configErrorOccurred = true
+                lastError = queryResult.message
+            }
+            is FirestoreCallResult.Error -> lastError = queryResult.message
         }
 
         // Combine discovered cloud accounts with local mirror accounts
         val combined = (discoveredCloudAccounts + localMatches).distinctBy {
-            PhoneUtil.normalizeMobile(it.mobileNumber) + "|" + PhoneUtil.normalizeGst(it.gstNumber)
+            val gst = PhoneUtil.normalizeGst(it.gstNumber)
+            if (gst.isNotEmpty()) gst else it.accountId
         }
 
         if (combined.size > 1) {
+            Log.i(TAG, "LOGIN_LOOKUP: MULTIPLE_ACCOUNTS_FOUND (${combined.size})")
             return@withContext CloudMobileLookupResult.FoundMultiple
         }
 
         if (combined.size == 1) {
             val single = combined.first()
             saveAccountToPersistentMirror(single)
+            Log.i(TAG, "LOGIN_LOOKUP: FIRESTORE_FOUND (${single.accountId})")
             return@withContext CloudMobileLookupResult.FoundSingle(single)
         }
 
-        if (!isNetworkAvailable() || networkErrorOccurred) {
+        if (networkErrorOccurred || !isNetworkAvailable()) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
             return@withContext CloudMobileLookupResult.NetworkError
         }
 
         if (timeoutOccurred) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
             return@withContext CloudMobileLookupResult.Timeout
         }
 
+        if (configErrorOccurred) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR")
+            return@withContext CloudMobileLookupResult.FirebaseConfigError(lastError ?: "Firebase configuration error")
+        }
+
+        if (lastError != null) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_ERROR - $lastError")
+            return@withContext CloudMobileLookupResult.Error(lastError)
+        }
+
+        Log.i(TAG, "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
         return@withContext CloudMobileLookupResult.NotFound
     }
 
@@ -947,7 +1079,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                 if (gstDoc == null || !gstDoc.exists()) {
                     gstDoc = safeFirestoreCall {
                         firestore.collection("jeweller_accounts_by_gst").document(cleanGst).get().await()
-                    }
+                    }.getOrNull()
                 }
                 if (gstDoc?.exists() == true) {
                     val acc = parseDocToAccount(gstDoc)
@@ -963,7 +1095,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         .limit(1)
                         .get()
                         .await()
-                }
+                }.getOrNull()
                 if (snapshot != null) {
                     for (doc in snapshot.documents) {
                         val acc = parseDocToAccount(doc)
@@ -1239,7 +1371,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         .document("profile")
                         .get()
                         .await()
-                }
+                }.getOrNull()
 
                 if (doc?.exists() == true) {
                     val settings = JewellerSettings(
@@ -1301,7 +1433,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         .collection("bills")
                         .get()
                         .await()
-                }
+                }.getOrNull()
 
             if (docs != null) {
                 for (doc in docs.documents) {
@@ -1393,7 +1525,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         .collection("stock_transactions")
                         .get()
                         .await()
-                }
+                }.getOrNull()
 
                 if (docs != null) {
                     for (doc in docs.documents) {
@@ -1516,7 +1648,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             .set(billMap, SetOptions.merge())
                             .await()
                     }
-                    cloudSuccess = (res != null)
+                    cloudSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore syncBill skipped or failed: ${e.message}")
                     cloudSuccess = false
@@ -1588,7 +1720,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             .delete()
                             .await()
                     }
-                    cloudSuccess = (res != null)
+                    cloudSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore deleteBill skipped or failed: ${e.message}")
                     cloudSuccess = false
@@ -1645,7 +1777,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             .set(txMap, SetOptions.merge())
                             .await()
                     }
-                    cloudSuccess = (res != null)
+                    cloudSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore syncStock skipped or failed: ${e.message}")
                     cloudSuccess = false
@@ -1707,7 +1839,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             .delete()
                             .await()
                     }
-                    cloudSuccess = (res != null)
+                    cloudSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore deleteStock error: ${e.message}")
                     cloudSuccess = false
@@ -1753,7 +1885,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             doc.reference.delete().await()
                         }
                     }
-                    cloudSuccess = (res != null)
+                    cloudSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore delete linked stock error: ${e.message}")
                     cloudSuccess = false
@@ -1808,7 +1940,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             .set(map, SetOptions.merge())
                             .await()
                     }
-                    cloudSuccess = (res != null)
+                    cloudSuccess = (res is FirestoreCallResult.Success)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore syncSettings skipped or failed: ${e.message}")
                     cloudSuccess = false
