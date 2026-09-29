@@ -501,6 +501,11 @@ class ExampleRobolectricTest {
     assertTrue(regRes is AuthResult.Success)
     val accountId = (regRes as AuthResult.Success).account.accountId
 
+    // Keep this regression test isolated if Robolectric reuses the same app database
+    // between test methods. This does not hide duplicates created by createBill/updateBill:
+    // the bill is inserted only after the account starts with no bills.
+    db.billDao().deleteAllBillsForAccount(accountId)
+
     val billId = "bill_unique_101"
     val item1 = com.example.data.model.BillItem(
       id = "item_1",
