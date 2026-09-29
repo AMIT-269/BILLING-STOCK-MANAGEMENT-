@@ -19,6 +19,17 @@ import org.robolectric.annotation.Config
 class ExampleRobolectricTest {
 
   @Test
+  fun `mobile normalization accepts exact 10 digits and common prefixes`() {
+    assertEquals("9876543210", com.example.util.PhoneUtil.normalizeMobile("9876543210"))
+    assertEquals("9876543210", com.example.util.PhoneUtil.normalizeMobile("+91 9876543210"))
+    assertEquals("9876543210", com.example.util.PhoneUtil.normalizeMobile("0919876543210"))
+    assertEquals("9876543210", com.example.util.PhoneUtil.normalizeMobile("૯૮૭૬૫૪૩૨૧૦"))
+    assertEquals("9876543210", com.example.util.PhoneUtil.canonicalAuthMobile("9876543210"))
+  }
+
+
+
+  @Test
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
