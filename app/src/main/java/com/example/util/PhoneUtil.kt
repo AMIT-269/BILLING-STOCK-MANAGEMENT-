@@ -46,6 +46,22 @@ object PhoneUtil {
         return normalizePhone(raw)
     }
 
+    /** Canonical auth mobile: accepts 10 digits or 0/91/091 prefixed input,
+     * converts Indic digits, and rejects anything else instead of truncating it. */
+    fun canonicalAuthMobile(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val ascii = convertIndicToAscii(raw.trim())
+        val digits = ascii.filter { it in '0'..'9' }
+        val normalized = when {
+            digits.length == 10 -> digits
+            digits.length == 11 && digits.startsWith("0") -> digits.substring(1)
+            digits.length == 12 && digits.startsWith("91") -> digits.substring(2)
+            digits.length == 13 && digits.startsWith("091") -> digits.substring(3)
+            else -> ""
+        }
+        return if (normalized.length == 10 && normalized.first() in '6'..'9') normalized else ""
+    }
+
     /**
      * Normalizes GST Number:
      * - Converts any Indic numerals to ASCII
