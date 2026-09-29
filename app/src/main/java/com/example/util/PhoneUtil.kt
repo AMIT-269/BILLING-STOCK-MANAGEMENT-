@@ -59,7 +59,7 @@ object PhoneUtil {
             digits.length == 13 && digits.startsWith("091") -> digits.substring(3)
             else -> ""
         }
-        return if (normalized.length == 10 && normalized.first() in '6'..'9') normalized else ""
+        // Authentication requires exactly 10 digits. Do not reject based on\n        // the first digit here; the stored-account lookup is the authority.\n        return if (normalized.length == 10) normalized else ""
     }
 
     /**
