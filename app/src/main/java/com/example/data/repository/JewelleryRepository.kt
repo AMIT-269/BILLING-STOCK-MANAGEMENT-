@@ -1083,8 +1083,8 @@ class JewelleryRepository(private val context: Context) {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Mobile Number Not Registered. Please click 'New Registration' below to create an account.",
-                                    "મોબાઈલ નંબર રજીસ્ટર્ડ નથી. કૃપા કરીને નીચે 'નવું રજીસ્ટ્રેશન' પર ક્લિક કરી એકાઉન્ટ બનાવો."
+                                    "Unable to verify the account right now because the cloud lookup timed out. Please check your connection and try again.",
+                                    "ક્લાઉડ ચકાસણીનો સમય પૂર્ણ થયો હોવાથી અત્યારે એકાઉન્ટ ચકાસી શકાયું નથી. કૃપા કરીને તમારું કનેક્શન તપાસો અને ફરી પ્રયાસ કરો."
                                 )
                             )
                         }
@@ -1118,8 +1118,8 @@ class JewelleryRepository(private val context: Context) {
                             Log.e("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR")
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Account verification failed temporarily. Please try again.",
-                                    "એકાઉન્ટ ચકાસણી હાલમાં થઈ શકી નથી. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                    "Unable to verify the account right now. Please check your connection and try again.",
+                                    "અત્યારે એકાઉન્ટ ચકાસી શકાયું નથી. કૃપા કરીને તમારું કનેક્શન તપાસો અને ફરી પ્રયાસ કરો."
                                 )
                             )
                         }
