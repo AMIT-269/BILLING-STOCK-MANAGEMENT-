@@ -4,7 +4,7 @@ data class BillItem(
     val id: String = java.util.UUID.randomUUID().toString(),
     val description: String = "",
     val metalType: String = "GOLD", // "GOLD" or "SILVER"
-    val purity: String = "22K",
+    val purity: String = "",
     val grossWeight: Double = 0.0,
     val netWeight: Double = 0.0,
     val currentTouch: Double = 85.0, // Touch %

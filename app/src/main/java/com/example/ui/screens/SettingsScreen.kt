@@ -62,11 +62,6 @@ fun SettingsScreen(
     var address by remember(settings) { mutableStateOf(settings?.address ?: "") }
     var gstNumber by remember(settings) { mutableStateOf(settings?.gstNumber ?: "") }
     var contactNumber by remember(settings) { mutableStateOf(settings?.contactNumber ?: account?.mobileNumber ?: "") }
-    var silverRateText by remember(settings) {
-        mutableStateOf(
-            if (settings != null && settings!!.silverRate > 0) LanguageManager.formatDouble(settings!!.silverRate, 0) else ""
-        )
-    }
     var currentLogoBase64 by remember(settings) { mutableStateOf(settings?.logoBase64) }
     var selectedLanguage by remember(settings) { mutableStateOf(settings?.language ?: "en") }
 
@@ -342,50 +337,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Daily Silver Price Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.PriceChange, contentDescription = null, tint = GoldDark)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = AppStrings.dailyRates(),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = silverRateText,
-                        onValueChange = { silverRateText = it },
-                        label = { Text(loc(en = "Silver Price (₹/kg)", gu = "ચાંદી ભાવ (₹/કિલો)")) },
-                        placeholder = { Text(loc(en = "Enter Silver Price in ₹/kg (e.g. 90000)", gu = "ચાંદી ભાવ ₹/કિલો દાખલ કરો (દા.ત. 90000)")) },
-                        leadingIcon = {
-                            Icon(Icons.Default.CurrencyRupee, contentDescription = null, tint = GoldDark)
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        supportingText = {
-                            Text(
-                                loc(
-                                    en = "Default silver rate for bill calculations and auto-conversions (₹/kg).",
-                                    gu = "બિલ ગણતરી અને સ્વચાલિત કન્વર્ઝન માટે ચાંદીનો ડિફોલ્ટ ભાવ (₹/કિલો)."
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag("settings_silver_rate"),
-                        singleLine = true
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
             // Cloud Data Sync Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -629,7 +580,7 @@ fun SettingsScreen(
                         logoBase64 = currentLogoBase64,
                         contactNumber = contactNumber,
                         goldRate22k = settings?.goldRate22k ?: 0.0,
-                        silverRate = silverRateText.toDoubleOrNull() ?: (settings?.silverRate ?: 0.0),
+                        silverRate = settings?.silverRate ?: 0.0,
                         language = selectedLanguage,
                         onSuccess = onNavigateBack
                     )

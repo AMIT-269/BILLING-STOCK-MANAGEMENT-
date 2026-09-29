@@ -1628,20 +1628,20 @@ fun ItemEditDialog(
                         if (metalType == "GOLD") "Gold Jewellery" else "Silver Jewellery"
                     }
 
-                    // Format Gold Karat as "20K", Silver Touch as "65%"
+                    // Format Gold Karat as "20K", Silver Touch as "65%" (leave blank if not mentioned)
                     val finalPurity = if (metalType == "GOLD") {
                         val cleanK = purityText.trim().filter { it.isDigit() || it == '.' }
                         if (cleanK.isNotBlank()) {
                             if (purityText.trim().endsWith("K", ignoreCase = true)) purityText.trim().uppercase() else "${cleanK}K"
                         } else {
-                            "22K"
+                            ""
                         }
                     } else {
                         val cleanP = purityText.trim().filter { it.isDigit() || it == '.' }
                         if (cleanP.isNotBlank()) {
                             if (purityText.trim().endsWith("%")) purityText.trim() else "${cleanP}%"
                         } else {
-                            if (currentTouch > 0) "${LanguageManager.formatDouble(currentTouch, 1)}%" else "92.5%"
+                            ""
                         }
                     }
 

@@ -690,12 +690,13 @@ class CloudSyncManager private constructor(private val context: Context) {
             return@withContext CloudLookupResult.Error("Invalid Mobile Number or GST Number")
         }
 
-        // Check local mirror first if network is unavailable
+        // Check local mirror first (local-first resilience)
+        val localMatch = getLocalMirroredAccounts().firstOrNull {
+            PhoneUtil.normalizeMobile(it.mobileNumber) == normMobile && PhoneUtil.normalizeGst(it.gstNumber) == normGst
+        }
+        if (localMatch != null) return@withContext CloudLookupResult.Found(localMatch)
+
         if (!isNetworkAvailable()) {
-            val localMatch = getLocalMirroredAccounts().firstOrNull {
-                PhoneUtil.normalizeMobile(it.mobileNumber) == normMobile && PhoneUtil.normalizeGst(it.gstNumber) == normGst
-            }
-            if (localMatch != null) return@withContext CloudLookupResult.Found(localMatch)
             return@withContext CloudLookupResult.NetworkError
         }
 
@@ -720,6 +721,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         PhoneUtil.normalizeGst(acc.gstNumber) == normGst
                     ) {
                         saveAccountToPersistentMirror(acc)
+                        Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_IDENTITY_FOUND ($normMobile, $normGst)")
                         return@withContext CloudLookupResult.Found(acc)
                     }
                 }
@@ -764,11 +766,11 @@ class CloudSyncManager private constructor(private val context: Context) {
         }
 
         // Fallback to local persistent mirror when server is not reached or account not found on server
-        val localMatch = getLocalMirroredAccounts().firstOrNull {
+        val fallbackLocalMatch = getLocalMirroredAccounts().firstOrNull {
             PhoneUtil.normalizeMobile(it.mobileNumber) == normMobile && PhoneUtil.normalizeGst(it.gstNumber) == normGst
         }
-        if (localMatch != null) {
-            return@withContext CloudLookupResult.Found(localMatch)
+        if (fallbackLocalMatch != null) {
+            return@withContext CloudLookupResult.Found(fallbackLocalMatch)
         }
 
         if (!isNetworkAvailable() || networkErrorOccurred) {

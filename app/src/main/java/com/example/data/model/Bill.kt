@@ -54,7 +54,7 @@ data class Bill(
                         id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                         description = obj.optString("description", ""),
                         metalType = obj.optString("metalType", "GOLD"),
-                        purity = obj.optString("purity", "22K"),
+                        purity = obj.optString("purity", ""),
                         grossWeight = gross,
                         netWeight = net,
                         currentTouch = currentTouch,

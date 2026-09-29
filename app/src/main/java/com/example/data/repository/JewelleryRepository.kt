@@ -461,16 +461,22 @@ class JewelleryRepository(private val context: Context) {
 
         val candidates = getAllCandidateAccounts(cleanMobile, "")
         val matchingAccounts = candidates.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-        if (matchingAccounts.size > 1) {
+        val nonBlankGst = matchingAccounts.filter { PhoneUtil.normalizeGst(it.gstNumber).isNotBlank() }
+        val distinctGsts = nonBlankGst.map { PhoneUtil.normalizeGst(it.gstNumber) }.distinct()
+        if (distinctGsts.size > 1) {
             // Multiple accounts share this mobile with different GSTs.
             // DO NOT GUESS! Exact Mobile + GST is required.
-            Log.w("JewelleryRepository", "Multiple accounts share mobile $cleanMobile (${matchingAccounts.size} found). Cannot guess account.")
+            Log.w("JewelleryRepository", "Multiple accounts share mobile $cleanMobile (${distinctGsts.size} different GSTs found). Cannot guess account.")
             return@withContext null
         }
-        if (matchingAccounts.size == 1) {
-            val single = matchingAccounts.first()
-            saveAccountPermanently(single)
-            return@withContext single
+        val targetAccount = if (nonBlankGst.isNotEmpty()) {
+            nonBlankGst.maxByOrNull { it.createdAt } ?: nonBlankGst.first()
+        } else {
+            matchingAccounts.firstOrNull()
+        }
+        if (targetAccount != null) {
+            saveAccountPermanently(targetAccount)
+            return@withContext targetAccount
         }
 
         return@withContext null
@@ -708,6 +714,9 @@ class JewelleryRepository(private val context: Context) {
                 return@withContext AuthResult.Error(loc("Please enter 4-digit code.", "૪ અંકનો કોડ દાખલ કરો."))
             }
 
+            // Immediately load all accounts from persistent storage (Room, SharedPreferences, Vault, Mirror)
+            loadAllKnownAccounts()
+
             var matchedAccount: JewellerAccount? = null
 
             if (cleanGst.isNotBlank()) {
@@ -817,7 +826,25 @@ class JewelleryRepository(private val context: Context) {
                     }
                 }
 
-                // G & H: Only if NO local store contains this account, query Cloud
+                // G. Check if either the mobile or the GST is already known locally with different credentials
+                val mobileExistsLocally = accountDao.findAccountsByMobile(cleanMobile).isNotEmpty() ||
+                    getPermanentAccountsList().any { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile } ||
+                    accountMemoryCache.values.any { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile } ||
+                    cloudSync.getLocalMirroredAccounts().any { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
+
+                val gstExistsLocally = accountDao.findAccountByGst(cleanGst) != null ||
+                    getPermanentAccountsList().any { PhoneUtil.normalizeGst(it.gstNumber) == cleanGst } ||
+                    accountMemoryCache.values.any { PhoneUtil.normalizeGst(it.gstNumber) == cleanGst } ||
+                    cloudSync.getLocalMirroredAccounts().any { PhoneUtil.normalizeGst(it.gstNumber) == cleanGst }
+
+                if (mobileExistsLocally || gstExistsLocally) {
+                    Log.i("JewelleryRepository", "LOGIN_LOOKUP: LOCAL_MISMATCH_FOUND ($cleanMobile, $cleanGst)")
+                    return@withContext AuthResult.Error(
+                        loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                    )
+                }
+
+                // H: Only if NO local store contains this account, query Cloud
                 if (matchedAccount == null) {
                     val cloudRes = cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
                     when (cloudRes) {
@@ -829,28 +856,20 @@ class JewelleryRepository(private val context: Context) {
                         is CloudSyncManager.CloudLookupResult.Timeout -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_TIMEOUT")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
                             )
                         }
                         is CloudSyncManager.CloudLookupResult.NetworkError -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
                             )
                         }
                         is CloudSyncManager.CloudLookupResult.Error -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: CLOUD_ERROR: ${cloudRes.message}")
-                            if (!cloudSync.isNetworkAvailable()) {
-                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
-                                return@withContext AuthResult.Error(
-                                    loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
-                                )
-                            } else {
-                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
-                                return@withContext AuthResult.Error(
-                                    loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
-                                )
-                            }
+                            return@withContext AuthResult.Error(
+                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                            )
                         }
                         is CloudSyncManager.CloudLookupResult.NotFound -> {
                             Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
@@ -918,9 +937,20 @@ class JewelleryRepository(private val context: Context) {
                 // Memory cache
                 localCandidates.addAll(accountMemoryCache.values.filter { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile })
 
-                // Deduplicate local candidates by identity: normalizedMobile + "|" + normalizedGst
-                val distinctLocal = localCandidates.distinctBy {
-                    PhoneUtil.normalizeMobile(it.mobileNumber) + "|" + PhoneUtil.normalizeGst(it.gstNumber)
+                // Deduplicate local candidates:
+                // Non-blank GST accounts take priority. Multiple accounts condition triggers ONLY when there are 2 or more distinct valid GSTs.
+                val nonBlankGstAccounts = localCandidates.filter { PhoneUtil.normalizeGst(it.gstNumber).isNotBlank() }
+                val distinctGsts = nonBlankGstAccounts.map { PhoneUtil.normalizeGst(it.gstNumber) }.distinct()
+
+                val distinctLocal = if (distinctGsts.size > 1) {
+                    // Truly multiple accounts with different GST numbers for this mobile!
+                    nonBlankGstAccounts.distinctBy { PhoneUtil.normalizeGst(it.gstNumber) }
+                } else if (nonBlankGstAccounts.isNotEmpty()) {
+                    // Exactly one valid GST number among all candidates: use the account with this GST!
+                    listOf(nonBlankGstAccounts.maxByOrNull { it.createdAt } ?: nonBlankGstAccounts.first())
+                } else {
+                    // No candidate has a GST number, deduplicate by accountId
+                    localCandidates.distinctBy { it.accountId.ifBlank { PhoneUtil.normalizeMobile(it.mobileNumber) } }
                 }
 
                 if (distinctLocal.size > 1) {
@@ -950,27 +980,20 @@ class JewelleryRepository(private val context: Context) {
                         is CloudSyncManager.CloudMobileLookupResult.Timeout -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_TIMEOUT")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.NetworkError -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
                             return@withContext AuthResult.Error(
-                                loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.Error -> {
-                            if (!cloudSync.isNetworkAvailable()) {
-                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: NETWORK_ERROR")
-                                return@withContext AuthResult.Error(
-                                    loc("Unable to verify account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
-                                )
-                            } else {
-                                Log.w("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
-                                return@withContext AuthResult.Error(
-                                    loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
-                                )
-                            }
+                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: CLOUD_ERROR: ${cloudRes.message}")
+                            return@withContext AuthResult.Error(
+                                loc("Unable to verify Account. Please check your internet connection and try again.", "એકાઉન્ટ ચકાસવામાં અસમર્થ. કૃપા કરીને તમારું ઇન્ટરનેટ કનેક્શન તપાસો અને ફરી પ્રયાસ કરો.")
+                            )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.NotFound -> {
                             Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
