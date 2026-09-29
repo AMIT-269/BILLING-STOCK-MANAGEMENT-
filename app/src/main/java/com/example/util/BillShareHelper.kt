@@ -75,7 +75,8 @@ object BillShareHelper {
                 if (isGu) "ચાંદી" else "Silver"
             }
 
-            sb.append("${idx + 1}. *${item.description}* ($metalLabel - ${item.purity})\n")
+            val puritySuffix = if (item.purity.isNotBlank()) " - ${item.purity}" else ""
+            sb.append("${idx + 1}. *${item.description}* ($metalLabel$puritySuffix)\n")
             val rateUnit = if (item.metalType == "SILVER") (if (isGu) "કિલો" else "kg") else wtUnit
             sb.append("   ${if (isGu) "વજન" else "Wt"}: ${LanguageManager.formatDouble(wt, 3)}$wtUnit  |  ${if (isGu) "ભાવ" else "Rate"}: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/$rateUnit\n")
             if (item.currentTouch > 0 || item.makingChargePercent > 0) {

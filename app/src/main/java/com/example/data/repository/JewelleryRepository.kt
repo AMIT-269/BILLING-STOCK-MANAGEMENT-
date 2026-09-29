@@ -826,25 +826,7 @@ class JewelleryRepository(private val context: Context) {
                     }
                 }
 
-                // G. Check if either the mobile or the GST is already known locally with different credentials
-                val mobileExistsLocally = accountDao.findAccountsByMobile(cleanMobile).isNotEmpty() ||
-                    getPermanentAccountsList().any { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile } ||
-                    accountMemoryCache.values.any { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile } ||
-                    cloudSync.getLocalMirroredAccounts().any { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
-
-                val gstExistsLocally = accountDao.findAccountByGst(cleanGst) != null ||
-                    getPermanentAccountsList().any { PhoneUtil.normalizeGst(it.gstNumber) == cleanGst } ||
-                    accountMemoryCache.values.any { PhoneUtil.normalizeGst(it.gstNumber) == cleanGst } ||
-                    cloudSync.getLocalMirroredAccounts().any { PhoneUtil.normalizeGst(it.gstNumber) == cleanGst }
-
-                if (mobileExistsLocally || gstExistsLocally) {
-                    Log.i("JewelleryRepository", "LOGIN_LOOKUP: LOCAL_MISMATCH_FOUND ($cleanMobile, $cleanGst)")
-                    return@withContext AuthResult.Error(
-                        loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
-                    )
-                }
-
-                // H: Only if NO local store contains this account, query Cloud
+                // G & H: Only if NO local store contains this exact Mobile+GST account, query Cloud
                 if (matchedAccount == null) {
                     val cloudRes = cloudSync.findAccountByMobileAndGstInCloud(cleanMobile, cleanGst)
                     when (cloudRes) {
@@ -1642,10 +1624,11 @@ class JewelleryRepository(private val context: Context) {
 
                 val desc = if (item.description.isNotBlank()) item.description else loc("Jewellery", "દાગીના")
                 val itemTypeLabel = if (isMetal) loc("Raw Metal", "ધાતુ") else loc("Jewellery", "દાગીના")
+                val purityDesc = if (item.purity.isNotBlank()) ", ${item.purity}" else ""
                 val remark = if (bill.billType == "SALE") {
-                    loc("Bill #${bill.billNumber} Sale: $desc ($itemTypeLabel, ${item.purity})", "બિલ નં. ${bill.billNumber} વેચાણ: $desc ($itemTypeLabel, ${item.purity})")
+                    loc("Bill #${bill.billNumber} Sale: $desc ($itemTypeLabel$purityDesc)", "બિલ નં. ${bill.billNumber} વેચાણ: $desc ($itemTypeLabel$purityDesc)")
                 } else {
-                    loc("Bill #${bill.billNumber} Karigar Purchase: $desc ($itemTypeLabel, ${item.purity})", "બિલ નં. ${bill.billNumber} કારીગર ખરીદી: $desc ($itemTypeLabel, ${item.purity})")
+                    loc("Bill #${bill.billNumber} Karigar Purchase: $desc ($itemTypeLabel$purityDesc)", "બિલ નં. ${bill.billNumber} કારીગર ખરીદી: $desc ($itemTypeLabel$purityDesc)")
                 }
 
                 val tx = StockTransaction(

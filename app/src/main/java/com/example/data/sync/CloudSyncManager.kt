@@ -285,16 +285,27 @@ class CloudSyncManager private constructor(private val context: Context) {
 
     private fun getFirestore(): FirebaseFirestore? {
         return try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                val options = FirebaseOptions.Builder()
-                    .setApplicationId("com.aistudio.jewellerybilling.jbms")
-                    .setProjectId("jewellery-billing-jbms")
-                    .setApiKey("AIzaSyB_BillingAppFirestoreKeyDefault")
-                    .build()
-                FirebaseApp.initializeApp(context, options)
-                Log.i(TAG, "FirebaseApp initialized successfully")
+            val app = if (FirebaseApp.getApps(context).isEmpty()) {
+                val initialized = FirebaseApp.initializeApp(context)
+                if (initialized == null) {
+                    val options = FirebaseOptions.fromResource(context)
+                    if (options != null) {
+                        FirebaseApp.initializeApp(context, options)
+                    } else {
+                        Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - No Firebase configuration available")
+                        null
+                    }
+                } else {
+                    initialized
+                }
+            } else {
+                FirebaseApp.getInstance()
             }
-            val firestore = FirebaseFirestore.getInstance()
+            if (app == null) {
+                Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - FirebaseApp is null")
+                return null
+            }
+            val firestore = FirebaseFirestore.getInstance(app)
             try {
                 val settings = FirebaseFirestoreSettings.Builder()
                     .setPersistenceEnabled(true)
@@ -303,7 +314,7 @@ class CloudSyncManager private constructor(private val context: Context) {
             } catch (_: Exception) {}
             firestore
         } catch (e: Exception) {
-            Log.w(TAG, "Firebase Firestore initialization: ${e.message}")
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_INIT_ERROR - ${e.message}")
             null
         }
     }
