@@ -14,6 +14,7 @@ import com.example.data.model.StockTransaction
 import com.example.util.PhoneUtil
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -357,6 +358,19 @@ class CloudSyncManager private constructor(private val context: Context) {
         fun isSuccess(): Boolean = this is Success
     }
 
+    private suspend fun ensureFirebaseAnonymousAuth(): Boolean {
+        return try {
+            val app = FirebaseApp.getInstance()
+            val auth = FirebaseAuth.getInstance(app)
+            if (auth.currentUser != null) return true
+            auth.signInAnonymously().await()
+            auth.currentUser != null
+        } catch (e: Exception) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_AUTH_ERROR - " + e.message)
+            false
+        }
+    }
+
     private suspend fun <T> safeFirestoreCall(
         timeoutMs: Long = 8000L,
         block: suspend () -> T
@@ -365,6 +379,10 @@ class CloudSyncManager private constructor(private val context: Context) {
         if (!netAvailable) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable")
             return FirestoreCallResult.NetworkError
+        }
+        if (!ensureFirebaseAnonymousAuth()) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_AUTH_ERROR - Anonymous Firebase authentication is unavailable")
+            return FirestoreCallResult.Error("Firebase authentication unavailable")
         }
         return try {
             val result = kotlinx.coroutines.withTimeout(timeoutMs) {
