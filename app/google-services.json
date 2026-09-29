@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "17819330884",
+    "project_id": "billing-stock--management",
+    "storage_bucket": "billing-stock--management.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:17819330884:android:04b94f2ac49eb25ed8cf11",
+        "android_client_info": {
+          "package_name": "com.aistudio.jewellerybilling.jbms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDINb6qzW9QgRcrEi5I59LEoOTyF0bA4xs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
