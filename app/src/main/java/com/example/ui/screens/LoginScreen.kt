@@ -308,9 +308,7 @@ fun LoginScreen(
                             // Validate the exact 10 digits entered on the login screen.
                             // This avoids rejecting a valid 10-digit number because of
                             // phone-prefix/normalization handling.
-                            val cleanMob = PhoneUtil.convertIndicToAscii(mobileNumber)
-                                .filter { it in '0'..'9' }
-                                .take(10)
+                            val cleanMob = PhoneUtil.canonicalAuthMobile(mobileNumber)
                             val cleanGst = PhoneUtil.normalizeGst(gstNumber)
                             val cleanCode = PhoneUtil.normalizeCode(code4Digit)
 
