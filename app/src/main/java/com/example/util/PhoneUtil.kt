@@ -5,18 +5,14 @@ object PhoneUtil {
         if (input.isNullOrEmpty()) return ""
         val sb = StringBuilder(input.length)
         for (c in input) {
-            when (c) {
-                '૦', '०' -> sb.append('0')
-                '૧', '१' -> sb.append('1')
-                '૨', '२' -> sb.append('2')
-                '૩', '३' -> sb.append('3')
-                '૪', '४' -> sb.append('4')
-                '૫', '५' -> sb.append('5')
-                '૬', '६' -> sb.append('6')
-                '૭', '७' -> sb.append('7')
-                '૮', '८' -> sb.append('8')
-                '૯', '९' -> sb.append('9')
-                else -> sb.append(c)
+            // Convert any Unicode decimal digit to an ASCII 0-9 digit.
+            // This prevents locale keyboards/IME input from being rejected
+            // even when the visible mobile number contains 10 valid digits.
+            val digit = c.digitToIntOrNull()
+            if (digit != null) {
+                sb.append(('0'.code + digit).toChar())
+            } else {
+                sb.append(c)
             }
         }
         return sb.toString()
