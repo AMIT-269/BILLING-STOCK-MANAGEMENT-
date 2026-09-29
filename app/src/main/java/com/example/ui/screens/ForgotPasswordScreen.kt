@@ -227,7 +227,7 @@ fun ForgotPasswordScreen(
 
                     Button(
                         onClick = {
-                            val cleanMobile = PhoneUtil.canonicalAuthMobile(mobileNumber)
+                            val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
                             val cleanGst = PhoneUtil.normalizeGst(gstNumber)
                             val cleanNew = PhoneUtil.normalizeCode(newCode4Digit)
                             val cleanConfirm = PhoneUtil.normalizeCode(confirmNewCode)
