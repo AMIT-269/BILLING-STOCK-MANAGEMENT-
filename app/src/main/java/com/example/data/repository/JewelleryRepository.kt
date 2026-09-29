@@ -939,10 +939,26 @@ class JewelleryRepository(private val context: Context) {
                                 )
                             )
                         }
-                        is CloudSyncManager.CloudLookupResult.FirebaseConfigError,
-                        is CloudSyncManager.CloudLookupResult.Error,
+                        is CloudSyncManager.CloudLookupResult.FirebaseConfigError -> {
+                            Log.e("JewelleryRepository", "LOGIN_LOOKUP: FIREBASE_CONFIG_ERROR")
+                            return@withContext AuthResult.Error(
+                                loc(
+                                    "Account service configuration error. Please try again later.",
+                                    "એકાઉન્ટ સેવા કન્ફિગરેશનમાં સમસ્યા છે. કૃપા કરીને થોડા સમય પછી ફરી પ્રયાસ કરો."
+                                )
+                            )
+                        }
+                        is CloudSyncManager.CloudLookupResult.Error -> {
+                            Log.e("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR")
+                            return@withContext AuthResult.Error(
+                                loc(
+                                    "Account verification failed temporarily. Please try again.",
+                                    "એકાઉન્ટ ચકાસણી હાલમાં થઈ શકી નથી. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                )
+                            )
+                        }
                         is CloudSyncManager.CloudLookupResult.NotFound -> {
-                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
                             val localAccForMobile = try {
                                 accountDao.findAccountsByMobile(cleanMobile).firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
                                     ?: accountDao.getAllAccounts().firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
@@ -1089,10 +1105,26 @@ class JewelleryRepository(private val context: Context) {
                                 )
                             )
                         }
-                        is CloudSyncManager.CloudMobileLookupResult.FirebaseConfigError,
-                        is CloudSyncManager.CloudMobileLookupResult.Error,
+                        is CloudSyncManager.CloudMobileLookupResult.FirebaseConfigError -> {
+                            Log.e("JewelleryRepository", "LOGIN_LOOKUP: FIREBASE_CONFIG_ERROR")
+                            return@withContext AuthResult.Error(
+                                loc(
+                                    "Account service configuration error. Please try again later.",
+                                    "એકાઉન્ટ સેવા કન્ફિગરેશનમાં સમસ્યા છે. કૃપા કરીને થોડા સમય પછી ફરી પ્રયાસ કરો."
+                                )
+                            )
+                        }
+                        is CloudSyncManager.CloudMobileLookupResult.Error -> {
+                            Log.e("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR")
+                            return@withContext AuthResult.Error(
+                                loc(
+                                    "Account verification failed temporarily. Please try again.",
+                                    "એકાઉન્ટ ચકાસણી હાલમાં થઈ શકી નથી. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                )
+                            )
+                        }
                         is CloudSyncManager.CloudMobileLookupResult.NotFound -> {
-                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: NOT_REGISTERED")
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
                             return@withContext AuthResult.Error(
                                 loc(
                                     "Mobile Number Not Registered. Please click 'New Registration' below to create an account.",
