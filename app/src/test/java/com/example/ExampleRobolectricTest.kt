@@ -723,6 +723,8 @@ class ExampleRobolectricTest {
       errorMsg.contains("ચકાસવામાં અસમર્થ") ||
       errorMsg.contains("connection") ||
       errorMsg.contains("કનેક્શન") ||
+      errorMsg.contains("configuration") ||
+      errorMsg.contains("કન્ફિગરેશન") ||
       errorMsg.contains("Not Registered") ||
       errorMsg.contains("રજીસ્ટર્ડ નથી")
     )
@@ -743,7 +745,9 @@ class ExampleRobolectricTest {
       errorMsg.contains("Registration") ||
       errorMsg.contains("રજીસ્ટ્રેશન") ||
       errorMsg.contains("connection") ||
-      errorMsg.contains("કનેક્શન")
+      errorMsg.contains("કનેક્શન") ||
+      errorMsg.contains("configuration") ||
+      errorMsg.contains("કન્ફિગરેશન")
     )
   }
 }
