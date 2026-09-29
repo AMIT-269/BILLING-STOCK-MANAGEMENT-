@@ -934,8 +934,8 @@ class JewelleryRepository(private val context: Context) {
                             }
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Account not found. Please check your Mobile Number and GST No., or click 'New Registration'.",
-                                    "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો અથવા 'નવું રજીસ્ટ્રેશન' કરો."
+                                    "Unable to verify the account because of a network error. Please check your connection and try again.",
+                                    "નેટવર્ક સમસ્યાને કારણે અત્યારે એકાઉન્ટ ચકાસી શકાયું નથી. કૃપા કરીને તમારું કનેક્શન તપાસો અને ફરી પ્રયાસ કરો."
                                 )
                             )
                         }
@@ -952,8 +952,8 @@ class JewelleryRepository(private val context: Context) {
                             Log.e("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR")
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Account verification failed temporarily. Please try again.",
-                                    "એકાઉન્ટ ચકાસણી હાલમાં થઈ શકી નથી. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                    "Unable to verify the account right now. Please check your connection and try again.",
+                                    "અત્યારે એકાઉન્ટ ચકાસી શકાયું નથી. કૃપા કરીને તમારું કનેક્શન તપાસો અને ફરી પ્રયાસ કરો."
                                 )
                             )
                         }
