@@ -62,7 +62,7 @@ fun SettingsScreen(
     var address by remember(settings) { mutableStateOf(settings?.address ?: "") }
     var gstNumber by remember(settings) { mutableStateOf(settings?.gstNumber ?: "") }
     var contactNumber by remember(settings) { mutableStateOf(settings?.contactNumber ?: account?.mobileNumber ?: "") }
-    var currentLogoBase64 by remember(settings) { mutableStateOf(settings?.logoBase64) }
+    var currentLogoBase64 by remember(account?.accountId) { mutableStateOf(settings?.logoBase64) }
     var selectedLanguage by remember(settings) { mutableStateOf(settings?.language ?: "en") }
 
     // Google Play Policy compliant zero-permission Photo Picker
@@ -73,6 +73,24 @@ fun SettingsScreen(
             val base64 = ImageHelper.uriToBase64(context, uri)
             if (base64 != null) {
                 currentLogoBase64 = base64
+
+                // Persist the selected logo immediately so recomposition/settings Flow
+                // updates cannot make the logo disappear before the main Save action.
+                val currentAccount = viewModel.currentAccount.value
+                val currentSettings = viewModel.settings.value
+                if (currentAccount != null) {
+                    viewModel.saveSettings(
+                        name = jewellerName,
+                        address = address,
+                        gstNumber = gstNumber,
+                        logoBase64 = base64,
+                        contactNumber = contactNumber,
+                        goldRate22k = currentSettings?.goldRate22k ?: 0.0,
+                        silverRate = currentSettings?.silverRate ?: 0.0,
+                        language = selectedLanguage,
+                        onSuccess = {}
+                    )
+                }
             }
         }
     }
