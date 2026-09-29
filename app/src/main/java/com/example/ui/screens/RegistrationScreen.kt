@@ -385,7 +385,7 @@ fun RegistrationScreen(
                     Button(
                         onClick = {
                             val cleanName = jewellerName.trim()
-                            val cleanMobile = PhoneUtil.canonicalAuthMobile(mobileNumber)
+                            val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
                             val cleanGst = PhoneUtil.normalizeGst(gstNumber)
                             val cleanCode = PhoneUtil.normalizeCode(code4Digit)
                             val cleanConfirm = PhoneUtil.normalizeCode(confirmCode4Digit)
