@@ -59,7 +59,9 @@ object PhoneUtil {
             digits.length == 13 && digits.startsWith("091") -> digits.substring(3)
             else -> ""
         }
-        // Authentication requires exactly 10 digits. Do not reject based on\n        // the first digit here; the stored-account lookup is the authority.\n        return if (normalized.length == 10) normalized else ""
+        // Authentication requires exactly 10 digits. Do not reject based on
+        // the first digit here; the stored-account lookup is the authority.
+        return if (normalized.length == 10) normalized else ""
     }
 
     /**
