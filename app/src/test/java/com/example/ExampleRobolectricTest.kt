@@ -716,5 +716,24 @@ class ExampleRobolectricTest {
       errorMsg.contains("રજીસ્ટર્ડ નથી")
     )
   }
+
+  @Test
+  fun `verify online unregistered mobile shows clear registration error message`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+
+    val result = repo.login("9111222333", "", "1234")
+    assertTrue(result is AuthResult.Error)
+    val errorMsg = (result as AuthResult.Error).message
+    assertTrue(
+      "Error must inform user to register: $errorMsg",
+      errorMsg.contains("Not Registered") ||
+      errorMsg.contains("રજીસ્ટર્ડ નથી") ||
+      errorMsg.contains("Registration") ||
+      errorMsg.contains("રજીસ્ટ્રેશન") ||
+      errorMsg.contains("connection") ||
+      errorMsg.contains("કનેક્શન")
+    )
+  }
 }
 

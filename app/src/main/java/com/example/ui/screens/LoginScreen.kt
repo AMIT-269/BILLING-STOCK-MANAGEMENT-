@@ -82,6 +82,7 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -248,12 +249,56 @@ fun LoginScreen(
 
                     if (errorMessage != null) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = errorMessage!!,
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth().testTag("login_error_banner")
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = "Error",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = errorMessage!!,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                if (errorMessage!!.contains("Not Registered", ignoreCase = true) ||
+                                    errorMessage!!.contains("રજીસ્ટર્ડ નથી", ignoreCase = true) ||
+                                    errorMessage!!.contains("Account not found", ignoreCase = true) ||
+                                    errorMessage!!.contains("એકાઉન્ટ મળ્યું નથી", ignoreCase = true)) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    TextButton(
+                                        onClick = {
+                                            viewModel.saveLastTypedCredentials(
+                                                mobile = PhoneUtil.normalizeMobile(mobileNumber),
+                                                gst = PhoneUtil.normalizeGst(gstNumber)
+                                            )
+                                            onNavigateToRegister()
+                                        },
+                                        modifier = Modifier.align(Alignment.End).testTag("login_err_goto_register_btn")
+                                    ) {
+                                        Text(
+                                            text = loc(en = "Click here to Register →", gu = "અહીં ક્લિક કરી રજીસ્ટ્રેશન કરો →"),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -264,7 +309,7 @@ fun LoginScreen(
                             val cleanGst = PhoneUtil.normalizeGst(gstNumber)
                             val cleanCode = PhoneUtil.normalizeCode(code4Digit)
 
-                            if (cleanMob.length != 10) {
+                            if (cleanMob.length != 10 || cleanMob.all { it == '0' }) {
                                 errorMessage = loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")
                                 return@Button
                             }
@@ -327,7 +372,13 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 TextButton(
-                    onClick = onNavigateToRegister,
+                    onClick = {
+                        viewModel.saveLastTypedCredentials(
+                            mobile = PhoneUtil.normalizeMobile(mobileNumber),
+                            gst = PhoneUtil.normalizeGst(gstNumber)
+                        )
+                        onNavigateToRegister()
+                    },
                     modifier = Modifier.testTag("login_to_register_btn")
                 ) {
                     Text(

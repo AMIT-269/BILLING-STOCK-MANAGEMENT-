@@ -334,6 +334,10 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
         return repository.getLastCredentialsTriple()
     }
 
+    fun saveLastTypedCredentials(mobile: String, gst: String = "") {
+        repository.saveLastTypedCredentials(mobile, gst)
+    }
+
     fun logout(onLoggedOut: () -> Unit) {
         repository.logout()
         onLoggedOut()

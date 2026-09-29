@@ -264,12 +264,27 @@ class CloudSyncManager private constructor(private val context: Context) {
 
     fun isNetworkAvailable(): Boolean {
         return try {
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-            val activeNet = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(activeNet) ?: return false
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                val activeNet = cm.activeNetwork
+                if (activeNet != null) {
+                    val caps = cm.getNetworkCapabilities(activeNet)
+                    if (caps != null && (
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                    )) {
+                        return true
+                    }
+                }
+            }
+            @Suppress("DEPRECATION")
+            val netInfo = cm.activeNetworkInfo
+            if (netInfo != null && netInfo.isConnectedOrConnecting) {
+                return true
+            }
+            cm.activeNetwork != null
         } catch (_: Exception) {
-            false
+            true
         }
     }
 
@@ -346,7 +361,8 @@ class CloudSyncManager private constructor(private val context: Context) {
         timeoutMs: Long = 8000L,
         block: suspend () -> T
     ): FirestoreCallResult<T> {
-        if (!isNetworkAvailable()) {
+        val netAvailable = isNetworkAvailable()
+        if (!netAvailable) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable")
             return FirestoreCallResult.NetworkError
         }
@@ -360,15 +376,19 @@ class CloudSyncManager private constructor(private val context: Context) {
             FirestoreCallResult.Timeout
         } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_ERROR - code: ${e.code}, msg: ${e.message}")
-            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.UNAVAILABLE || !isNetworkAvailable()) {
-                Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Firestore UNAVAILABLE")
+            if (!isNetworkAvailable()) {
+                Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network disconnected")
                 FirestoreCallResult.NetworkError
             } else {
-                FirestoreCallResult.Error(e.message ?: "Firestore error", e)
+                FirestoreCallResult.Error(e.message ?: "Firestore error (${e.code})", e)
             }
         } catch (e: java.io.IOException) {
-            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - ${e.message}")
-            FirestoreCallResult.NetworkError
+            Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_IO_ERROR - ${e.message}")
+            if (!isNetworkAvailable()) {
+                FirestoreCallResult.NetworkError
+            } else {
+                FirestoreCallResult.Error(e.message ?: "Network error", e)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_ERROR - ${e.message}")
             if (!isNetworkAvailable()) {
@@ -861,7 +881,7 @@ class CloudSyncManager private constructor(private val context: Context) {
             return@withContext CloudLookupResult.Found(fallbackLocalMatch)
         }
 
-        if (networkErrorOccurred || !isNetworkAvailable()) {
+        if (!isNetworkAvailable()) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
             return@withContext CloudLookupResult.NetworkError
         }
@@ -1003,7 +1023,7 @@ class CloudSyncManager private constructor(private val context: Context) {
             return@withContext CloudMobileLookupResult.FoundSingle(single)
         }
 
-        if (networkErrorOccurred || !isNetworkAvailable()) {
+        if (!isNetworkAvailable()) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
             return@withContext CloudMobileLookupResult.NetworkError
         }

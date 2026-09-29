@@ -48,6 +48,18 @@ fun RegistrationScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSuccessDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        val creds = viewModel.getLastCredentialsTriple()
+        val cleanMob = PhoneUtil.normalizeMobile(creds.second)
+        val cleanGst = PhoneUtil.normalizeGst(creds.third)
+        if (mobileNumber.isBlank() && cleanMob.isNotBlank()) {
+            mobileNumber = cleanMob
+        }
+        if (gstNumber.isBlank() && cleanGst.isNotBlank()) {
+            gstNumber = cleanGst
+        }
+    }
+
     val isLoading by viewModel.isLoading.collectAsState()
 
     if (showSuccessDialog) {
@@ -114,6 +126,7 @@ fun RegistrationScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally

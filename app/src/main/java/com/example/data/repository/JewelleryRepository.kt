@@ -165,14 +165,23 @@ class JewelleryRepository(private val context: Context) {
     suspend fun saveAccountPermanently(account: JewellerAccount) {
         val cleanMob = PhoneUtil.normalizeMobile(account.mobileNumber)
         val cleanGst = PhoneUtil.normalizeGst(account.gstNumber)
+        val cleanCode = PhoneUtil.normalizeCode(account.code4Digit)
+        val normalizedAccount = account.copy(
+            mobileNumber = cleanMob,
+            gstNumber = cleanGst,
+            code4Digit = cleanCode
+        )
         val identityKey = getAccountIdentityKey(cleanMob, cleanGst)
         if (identityKey.isNotBlank() && identityKey != "|") {
-            accountMemoryCache[identityKey] = account
+            accountMemoryCache[identityKey] = normalizedAccount
+        }
+        if (cleanMob.isNotEmpty()) {
+            accountMemoryCache["$cleanMob|"] = normalizedAccount
         }
 
         // 1. Room DB
         try {
-            accountDao.insertAccount(account)
+            accountDao.insertAccount(normalizedAccount)
         } catch (e: Exception) {
             Log.w("JewelleryRepository", "Room insertAccount error: ${e.message}")
         }
@@ -180,51 +189,51 @@ class JewelleryRepository(private val context: Context) {
         // 2. Permanent SharedPreferences registry
         try {
             val accountJson = JSONObject().apply {
-                put("accountId", account.accountId)
-                put("jewellerName", account.jewellerName)
-                put("mobileNumber", account.mobileNumber)
-                put("code4Digit", account.code4Digit)
-                put("gstNumber", account.gstNumber)
-                put("isLicensed", account.isLicensed)
-                put("status", account.status)
-                put("createdAt", account.createdAt)
+                put("accountId", normalizedAccount.accountId)
+                put("jewellerName", normalizedAccount.jewellerName)
+                put("mobileNumber", normalizedAccount.mobileNumber)
+                put("code4Digit", normalizedAccount.code4Digit)
+                put("gstNumber", normalizedAccount.gstNumber)
+                put("isLicensed", normalizedAccount.isLicensed)
+                put("status", normalizedAccount.status)
+                put("createdAt", normalizedAccount.createdAt)
             }.toString()
 
             val editor = permanentPrefs.edit()
             if (cleanMob.isNotEmpty() && cleanGst.isNotEmpty()) {
                 editor.putString("account_${cleanMob}_${cleanGst}", accountJson)
-                editor.putString("code_${cleanMob}_${cleanGst}", account.code4Digit)
+                editor.putString("code_${cleanMob}_${cleanGst}", normalizedAccount.code4Digit)
             }
             // Preserve account_$cleanMob if it doesn't collide with a different account
             val existingDirectJson = permanentPrefs.getString("account_$cleanMob", null)
             val existingDirect = parseSingleAccountJson(existingDirectJson)
-            if (existingDirect == null || existingDirect.accountId == account.accountId || PhoneUtil.normalizeGst(existingDirect.gstNumber) == cleanGst) {
+            if (existingDirect == null || existingDirect.accountId == normalizedAccount.accountId || PhoneUtil.normalizeGst(existingDirect.gstNumber) == cleanGst) {
                 editor.putString("account_$cleanMob", accountJson)
-                editor.putString("code_$cleanMob", account.code4Digit)
+                editor.putString("code_$cleanMob", normalizedAccount.code4Digit)
             }
             if (cleanGst.isNotEmpty()) {
                 editor.putString("account_gst_$cleanGst", accountJson)
-                editor.putString("code_gst_$cleanGst", account.code4Digit)
+                editor.putString("code_gst_$cleanGst", normalizedAccount.code4Digit)
             }
             editor.putString("last_registered_account", accountJson)
-            editor.putString("last_registered_mobile", account.mobileNumber)
-            editor.putString("last_registered_name", account.jewellerName)
-            editor.putString("last_registered_gst", account.gstNumber)
-            editor.putString("last_registered_code", account.code4Digit)
+            editor.putString("last_registered_mobile", normalizedAccount.mobileNumber)
+            editor.putString("last_registered_name", normalizedAccount.jewellerName)
+            editor.putString("last_registered_gst", normalizedAccount.gstNumber)
+            editor.putString("last_registered_code", normalizedAccount.code4Digit)
 
             val existing = getPermanentAccountsList().toMutableList()
             val idx = existing.indexOfFirst {
-                if (account.accountId.isNotBlank() && it.accountId.isNotBlank()) {
-                    it.accountId == account.accountId
+                if (normalizedAccount.accountId.isNotBlank() && it.accountId.isNotBlank()) {
+                    it.accountId == normalizedAccount.accountId
                 } else {
                     PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob &&
                     PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
                 }
             }
             if (idx >= 0) {
-                existing[idx] = account
+                existing[idx] = normalizedAccount
             } else {
-                existing.add(account)
+                existing.add(normalizedAccount)
             }
 
             val jsonArray = JSONArray()
@@ -252,16 +261,16 @@ class JewelleryRepository(private val context: Context) {
 
         // 4. CloudSync local mirror
         try {
-            cloudSync.saveAccountToPersistentMirror(account)
+            cloudSync.saveAccountToPersistentMirror(normalizedAccount)
         } catch (_: Exception) {}
 
         // 5. Session credentials
         try {
             sessionPrefs.edit()
-                .putString("last_jeweller_name", account.jewellerName)
-                .putString("last_mobile_number", account.mobileNumber)
-                .putString("last_gst_number", account.gstNumber)
-                .putString("last_code4digit", account.code4Digit)
+                .putString("last_jeweller_name", normalizedAccount.jewellerName)
+                .putString("last_mobile_number", normalizedAccount.mobileNumber)
+                .putString("last_gst_number", normalizedAccount.gstNumber)
+                .putString("last_code4digit", normalizedAccount.code4Digit)
                 .commit()
         } catch (_: Exception) {}
     }
@@ -776,7 +785,7 @@ class JewelleryRepository(private val context: Context) {
             val cleanGst = PhoneUtil.normalizeGst(gstNumber)
             val cleanCode = PhoneUtil.normalizeCode(code)
 
-            if (cleanMobile.length != 10) {
+            if (cleanMobile.length != 10 || cleanMobile.all { it == '0' }) {
                 return@withContext AuthResult.Error(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો."))
             }
             if (cleanCode.length != 4) {
@@ -908,43 +917,49 @@ class JewelleryRepository(private val context: Context) {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Verification timed out. Cloud service is taking too long to respond. Please try again.",
-                                    "ચકાસણીનો સમય સમાપ્ત થયો. ક્લાઉડ સેવા પ્રતિસાદ આપવામાં ઘણો સમય લઈ રહી છે. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                    "Account verification timed out. Please check your Mobile Number and GST No., or register a new account.",
+                                    "એકાઉન્ટ ચકાસણીનો સમય સમાપ્ત થયો. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો અથવા નવું રજીસ્ટ્રેશન કરો."
                                 )
                             )
                         }
                         is CloudSyncManager.CloudLookupResult.NetworkError -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
+                            if (!cloudSync.isNetworkAvailable()) {
+                                return@withContext AuthResult.Error(
+                                    loc(
+                                        "No internet connection. Please check your network or register a new account on this device.",
+                                        "કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો અથવા આ ડિવાઇસ પર નવું રજીસ્ટ્રેશન કરો."
+                                    )
+                                )
+                            }
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Unable to verify account: No internet connection. Please check your network and try again.",
-                                    "એકાઉન્ટ ચકાસવામાં અસમર્થ: કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                                    "Account not found. Please check your Mobile Number and GST No., or click 'New Registration'.",
+                                    "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો અથવા 'નવું રજીસ્ટ્રેશન' કરો."
                                 )
                             )
                         }
-                        is CloudSyncManager.CloudLookupResult.FirebaseConfigError -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIREBASE_INIT_ERROR: ${cloudRes.message}")
-                            return@withContext AuthResult.Error(
-                                loc(
-                                    "Cloud service is currently unavailable. Account not found on this device.",
-                                    "ક્લાઉડ સેવા હાલમાં અનુપલબ્ધ છે. આ ઉપકરણ પર એકાઉન્ટ મળ્યું નથી."
-                                )
-                            )
-                        }
-                        is CloudSyncManager.CloudLookupResult.Error -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR: ${cloudRes.message}")
-                            return@withContext AuthResult.Error(
-                                loc(
-                                    "Temporary cloud verification error. Please try again in a few moments.",
-                                    "કામચલાઉ ક્લાઉડ ચકાસણી ભૂલ. કૃપા કરીને થોડીવાર પછી ફરી પ્રયાસ કરો."
-                                )
-                            )
-                        }
+                        is CloudSyncManager.CloudLookupResult.FirebaseConfigError,
+                        is CloudSyncManager.CloudLookupResult.Error,
                         is CloudSyncManager.CloudLookupResult.NotFound -> {
                             Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
-                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                            val localAccForMobile = try {
+                                accountDao.findAccountsByMobile(cleanMobile).firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
+                                    ?: accountDao.getAllAccounts().firstOrNull { PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile }
+                            } catch (_: Exception) { null }
+                            if (localAccForMobile != null) {
+                                return@withContext AuthResult.Error(
+                                    loc(
+                                        "Entered GST No. does not match the registered account. Leave GST blank or enter correct GST.",
+                                        "દાખલ કરેલ GST નંબર રજીસ્ટર્ડ એકાઉન્ટ સાથે મેળ ખાતો નથી. કૃપા કરીને GST ખાલી રાખો અથવા સાચો GST દાખલ કરો."
+                                    )
+                                )
+                            }
                             return@withContext AuthResult.Error(
-                                loc("Account not found. Please check your Mobile Number and GST No.", "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો.")
+                                loc(
+                                    "Account not found. Please check your Mobile Number and GST No., or click 'New Registration'.",
+                                    "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો અથવા 'નવું રજીસ્ટ્રેશન' કરો."
+                                )
                             )
                         }
                     }
@@ -1052,43 +1067,37 @@ class JewelleryRepository(private val context: Context) {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_TIMEOUT")
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Verification timed out. Cloud service is taking too long to respond. Please try again.",
-                                    "ચકાસણીનો સમય સમાપ્ત થયો. ક્લાઉડ સેવા પ્રતિસાદ આપવામાં ઘણો સમય લઈ રહી છે. કૃપા કરીને ફરી પ્રયાસ કરો."
+                                    "Mobile Number Not Registered. Please click 'New Registration' below to create an account.",
+                                    "મોબાઈલ નંબર રજીસ્ટર્ડ નથી. કૃપા કરીને નીચે 'નવું રજીસ્ટ્રેશન' પર ક્લિક કરી એકાઉન્ટ બનાવો."
                                 )
                             )
                         }
                         is CloudSyncManager.CloudMobileLookupResult.NetworkError -> {
                             Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR")
+                            if (!cloudSync.isNetworkAvailable()) {
+                                return@withContext AuthResult.Error(
+                                    loc(
+                                        "No internet connection. Please check your network or click 'New Registration' to create an account.",
+                                        "કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક તપાસો અથવા નવું એકાઉન્ટ બનાવવા માટે 'નવું રજીસ્ટ્રેશન' કરો."
+                                    )
+                                )
+                            }
                             return@withContext AuthResult.Error(
                                 loc(
-                                    "Unable to verify account: No internet connection. Please check your network and try again.",
-                                    "એકાઉન્ટ ચકાસવામાં અસમર્થ: કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                                    "Mobile Number Not Registered. Please click 'New Registration' below to create an account.",
+                                    "મોબાઈલ નંબર રજીસ્ટર્ડ નથી. કૃપા કરીને નીચે 'નવું રજીસ્ટ્રેશન' પર ક્લિક કરી એકાઉન્ટ બનાવો."
                                 )
                             )
                         }
-                        is CloudSyncManager.CloudMobileLookupResult.FirebaseConfigError -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIREBASE_INIT_ERROR: ${cloudRes.message}")
-                            return@withContext AuthResult.Error(
-                                loc(
-                                    "Cloud service is currently unavailable. Mobile number not registered on this device.",
-                                    "ક્લાઉડ સેવા હાલમાં અનુપલબ્ધ છે. આ ઉપકરણ પર મોબાઈલ નંબર રજીસ્ટર્ડ નથી."
-                                )
-                            )
-                        }
-                        is CloudSyncManager.CloudMobileLookupResult.Error -> {
-                            Log.w("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_ERROR: ${cloudRes.message}")
-                            return@withContext AuthResult.Error(
-                                loc(
-                                    "Temporary cloud verification error. Please try again in a few moments.",
-                                    "કામચલાઉ ક્લાઉડ ચકાસણી ભૂલ. કૃપા કરીને થોડીવાર પછી ફરી પ્રયાસ કરો."
-                                )
-                            )
-                        }
+                        is CloudSyncManager.CloudMobileLookupResult.FirebaseConfigError,
+                        is CloudSyncManager.CloudMobileLookupResult.Error,
                         is CloudSyncManager.CloudMobileLookupResult.NotFound -> {
-                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: FIRESTORE_NOT_FOUND")
-                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: TRUE_NOT_FOUND")
+                            Log.i("JewelleryRepository", "LOGIN_LOOKUP: NOT_REGISTERED")
                             return@withContext AuthResult.Error(
-                                loc("Mobile Number Not Registered.", "મોબાઈલ નંબર રજીસ્ટર્ડ નથી.")
+                                loc(
+                                    "Mobile Number Not Registered. Please click 'New Registration' below to create an account.",
+                                    "મોબાઈલ નંબર રજીસ્ટર્ડ નથી. કૃપા કરીને નીચે 'નવું રજીસ્ટ્રેશન' પર ક્લિક કરી એકાઉન્ટ બનાવો."
+                                )
                             )
                         }
                     }
@@ -1193,18 +1202,26 @@ class JewelleryRepository(private val context: Context) {
                     )
                 }
                 is CloudSyncManager.CloudLookupResult.NetworkError -> {
+                    if (!cloudSync.isNetworkAvailable()) {
+                        return@withContext AuthResult.Error(
+                            loc(
+                                "No internet connection. Please check your network and try again.",
+                                "કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                            )
+                        )
+                    }
                     return@withContext AuthResult.Error(
                         loc(
-                            "Unable to verify account: No internet connection. Please check your network and try again.",
-                            "એકાઉન્ટ ચકાસવામાં અસમર્થ: કોઈ ઇન્ટરનેટ કનેક્શન નથી. કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો."
+                            "Account not found. Please check your Mobile Number and GST No.",
+                            "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો."
                         )
                     )
                 }
                 is CloudSyncManager.CloudLookupResult.FirebaseConfigError -> {
                     return@withContext AuthResult.Error(
                         loc(
-                            "Cloud service is currently unavailable. Account not found on this device.",
-                            "ક્લાઉડ સેવા હાલમાં અનુપલબ્ધ છે. આ ઉપકરણ પર એકાઉન્ટ મળ્યું નથી."
+                            "Account not found. Please check your Mobile Number and GST No.",
+                            "એકાઉન્ટ મળ્યું નથી. કૃપા કરીને તમારો મોબાઈલ નંબર અને GST નંબર ચકાસો."
                         )
                     )
                 }
@@ -1718,6 +1735,19 @@ class JewelleryRepository(private val context: Context) {
         }
 
         return Triple(name, mobile, gst)
+    }
+
+    fun saveLastTypedCredentials(mobile: String, gst: String = "") {
+        val cleanMob = PhoneUtil.normalizeMobile(mobile)
+        val cleanGst = PhoneUtil.normalizeGst(gst)
+        val editor = sessionPrefs.edit()
+        if (cleanMob.isNotEmpty()) {
+            editor.putString("last_mobile_number", cleanMob)
+        }
+        if (cleanGst.isNotEmpty()) {
+            editor.putString("last_gst_number", cleanGst)
+        }
+        editor.apply()
     }
 
     /**
