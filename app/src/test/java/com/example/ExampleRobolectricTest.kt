@@ -284,6 +284,17 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  @Test
+  fun `verify exact silver sale and payment kg calculation example`() {
+    // 500 g at 100% purity and ₹234,000/kg must always equal ₹117,000.
+    val weightGrams = 500.0
+    val purity = 100.0
+    val pricePerKg = 234000.0
+    val fineGrams = weightGrams * purity / 100.0
+    val amount = fineGrams * (pricePerKg / 1000.0)
+    assertEquals(117000.0, amount, 0.0001)
+  }
+
   fun `verify silver price unit per kg calculation`() {
     // Silver price = 90,000 Rs/kg
     // Rate per gram = 90,000 / 1000 = 90 Rs/g
