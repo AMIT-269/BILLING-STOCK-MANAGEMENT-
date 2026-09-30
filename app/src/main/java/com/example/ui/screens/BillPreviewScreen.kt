@@ -808,7 +808,7 @@ fun BillPreviewScreen(
                                                                 )
                                                             }
                                                             Text(
-                                                                text = p.getFullPaymentFormula(isGu),
+                                                                text = p.getFormattedBreakdown(isGu),
                                                                 fontSize = 10.5.sp,
                                                                 fontWeight = FontWeight.SemiBold,
                                                                 color = GoldDark
