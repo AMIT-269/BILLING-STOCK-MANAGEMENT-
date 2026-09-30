@@ -755,14 +755,14 @@ fun BillPreviewScreen(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
-                            // Payment Details & Remarks Cards
-                            Row(
+                            // Payment Details first (full width), then Remark box below on the right
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 // Payment Details Card
                                 Card(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
                                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
@@ -877,9 +877,14 @@ fun BillPreviewScreen(
                                     }
                                 }
 
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
                                 // Remarks & Blessings Card
                                 Card(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.widthIn(max = 420.dp),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
                                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
@@ -919,6 +924,8 @@ fun BillPreviewScreen(
                                             color = GoldDark
                                         )
                                     }
+                                }
+                            }
                                 }
                             }
 
