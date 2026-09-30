@@ -284,7 +284,6 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  @Test
   fun `verify exact silver sale and payment kg calculation example`() {
     // 500 g at 100% purity and ₹234,000/kg must always equal ₹117,000.
     val weightGrams = 500.0
