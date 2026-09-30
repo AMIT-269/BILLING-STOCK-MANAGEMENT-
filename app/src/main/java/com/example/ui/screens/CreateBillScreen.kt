@@ -207,7 +207,7 @@ fun CreateBillScreen(
             initialPayment = currentPayment,
             billType = billType,
             defaultGoldRate = settings?.goldRate22k ?: 0.0,
-            defaultSilverRate = settings?.silverRate ?: 0.0,
+            defaultSilverRate = 0.0,
             isGu = isGu,
             onDismiss = {
                 showAddPaymentDialog = false
@@ -759,7 +759,7 @@ fun CreateBillScreen(
                                     if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "100.000"
                                     if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = "70.0"
                                     if (inlineMetalRateText.isBlank()) {
-                                        val defRate = settings?.silverRate ?: 88.0
+                                        val defRate = 0.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
                                     }
                                 },
@@ -892,7 +892,9 @@ fun CreateBillScreen(
                                     val currTouch = inlineMetalTouchText.toDoubleOrNull() ?: (if (isGold) 80.0 else 70.0)
                                     val currRate = inlineMetalRateText.toDoubleOrNull() ?: defaultRate
                                     val currFine = if (currWt > 0) currWt * currTouch / 100.0 else 0.0
-                                    val currVal = currFine * currRate
+                                    // Silver payment rate is entered in ₹/kg; convert to ₹/g for amount display.
+                                    val currRatePerGram = if (isGold) currRate else currRate / 1000.0
+                                    val currVal = currFine * currRatePerGram
 
                                     Surface(
                                         color = if (isGold) GoldLight.copy(alpha = 0.25f) else Color(0xFFE2E8F0),
