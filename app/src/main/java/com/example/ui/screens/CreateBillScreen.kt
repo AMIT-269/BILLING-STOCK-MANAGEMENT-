@@ -181,7 +181,9 @@ fun CreateBillScreen(
             initialItem = currentItem,
             billType = billType,
             defaultGoldRate = settings?.goldRate22k ?: 0.0,
-            defaultSilverRate = settings?.silverRate ?: 0.0,
+            // Silver payment rate is always entered as ₹/kg. Do not inject the legacy
+            // settings silver rate here because older settings may be stored as ₹/g.
+            defaultSilverRate = 0.0,
             isGu = isGu,
             onDismiss = {
                 showAddItemDialog = false
