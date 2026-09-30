@@ -182,7 +182,7 @@ fun BillPreviewScreen(
             initialPayment = editingPayment,
             billType = bill.billType,
             defaultGoldRate = settings?.goldRate22k ?: 7200.0,
-            defaultSilverRate = settings?.silverRate ?: 88.0,
+            defaultSilverRate = 0.0,
             isGu = isGu,
             onDismiss = { editingPayment = null },
             onSave = { updatedPayment ->
