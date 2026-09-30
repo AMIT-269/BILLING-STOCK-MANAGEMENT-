@@ -1896,7 +1896,10 @@ class JewelleryRepository(private val context: Context) {
                         }
                     }
                     "SILVER" -> {
-                        val physicalWt = if (p.metalWeight > 0) p.metalWeight else (if (p.metalRate > 0) p.amount / p.metalRate else 0.0)
+                        // BillPayment.metalRate for Silver is stored as ₹/kg.
+                        // Convert to ₹/g before deriving grams from amount.
+                        val ratePerGram = if (p.metalRate > 0) p.metalRate / 1000.0 else 0.0
+                        val physicalWt = if (p.metalWeight > 0) p.metalWeight else (if (ratePerGram > 0) p.amount / ratePerGram else 0.0)
                         val touch = if (p.metalTouch > 0) p.metalTouch else 100.0
                         val fineWt = if (p.calculatedFineWeight > 0) p.calculatedFineWeight else (physicalWt * touch / 100.0)
                         val stockQty = if (fineWt > 0) fineWt else physicalWt
