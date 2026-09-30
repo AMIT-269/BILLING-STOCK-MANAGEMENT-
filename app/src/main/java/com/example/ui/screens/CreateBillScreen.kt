@@ -787,7 +787,10 @@ fun CreateBillScreen(
                                 val touch = touchS.toDoubleOrNull() ?: (if (isGold) 80.0 else 70.0)
                                 val rate = rateS.toDoubleOrNull() ?: defaultRate
                                 val fine = if (wt > 0) wt * touch / 100.0 else 0.0
-                                val metalVal = fine * rate
+                                // Silver payment rate is ₹/kg; convert to ₹/g exactly once.
+                                // Gold payment rate remains ₹/g.
+                                val ratePerGram = if (isGold) rate else rate / 1000.0
+                                val metalVal = fine * ratePerGram
 
                                 val isSale = billType == "SALE"
                                 val metalPayment = BillPayment(
