@@ -166,7 +166,8 @@ fun BillPreviewScreen(
             initialPayment = null,
             billType = bill.billType,
             defaultGoldRate = settings?.goldRate22k ?: 7200.0,
-            defaultSilverRate = settings?.silverRate ?: 88.0,
+            // Silver payment input is ₹/kg. Keep legacy settings out of this payment dialog.
+            defaultSilverRate = 0.0,
             isGu = isGu,
             onDismiss = { showAddPaymentDialog = false },
             onSave = { newPayment ->
