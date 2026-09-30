@@ -34,3 +34,5 @@ jobs:
           name: BILLING-STOCK-MANAGEMENT-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+# Fresh build trigger after Firebase configuration
