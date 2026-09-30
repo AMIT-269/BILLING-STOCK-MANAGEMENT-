@@ -729,7 +729,7 @@ fun CreateBillScreen(
                                     if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "100.000"
                                     if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = "70.0"
                                     if (inlineMetalRateText.isBlank()) {
-                                        val defRate = settings?.silverRate ?: 88.0
+                                        val defRate = 0.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
                                     }
                                 },
@@ -785,7 +785,7 @@ fun CreateBillScreen(
                             val isGold = paymentMode.startsWith("GOLD")
                             val isSplit = paymentMode.endsWith("_CASH")
                             val metalName = if (isGold) loc(en = "Gold", gu = "સોનું") else loc(en = "Silver", gu = "ચાંદી")
-                            val defaultRate = if (isGold) (settings?.goldRate22k ?: 7200.0) else (settings?.silverRate ?: 88.0)
+                            val defaultRate = if (isGold) (settings?.goldRate22k ?: 7200.0) else 0.0
 
                             val syncInlinePayments: (String, String, String, String) -> Unit = { wtS, touchS, rateS, cashS ->
                                 val wt = wtS.toDoubleOrNull() ?: 0.0
