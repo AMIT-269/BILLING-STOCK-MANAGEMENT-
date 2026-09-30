@@ -34,4 +34,5 @@ jobs:
           name: BILLING-STOCK-MANAGEMENT-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-# Silver kg-rate regression build trigger 2026-09-30
+
+# Silver kg-rate regression build trigger 2026-09-30 - verified rebuild
