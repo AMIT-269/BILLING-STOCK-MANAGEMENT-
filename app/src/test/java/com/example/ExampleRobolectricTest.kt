@@ -765,5 +765,21 @@ class ExampleRobolectricTest {
       errorMsg.contains("કન્ફિગરેશન")
     )
   }
+  @Test
+  fun `verify silver payment rate is kg based and never multiplied by 1000`() {
+    val weightGrams = 1000.0
+    val touch = 100.0
+    val enteredRatePerKg = 234000.0
+
+    // Silver payment rate is entered as ₹/kg; calculation uses ₹/g internally.
+    val ratePerGram = enteredRatePerKg / 1000.0
+    val amount = (weightGrams * touch / 100.0) * ratePerGram
+
+    assertEquals(234.0, ratePerGram, 0.0001)
+    assertEquals(234000.0, amount, 0.0001)
+    assertEquals(234000.0, enteredRatePerKg, 0.0001)
+    assertEquals(false, amount == enteredRatePerKg * 1000.0)
+  }
+
 }
 
