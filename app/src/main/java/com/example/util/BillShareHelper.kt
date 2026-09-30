@@ -120,15 +120,15 @@ object BillShareHelper {
                 when (p.paymentMode.uppercase()) {
                     "GOLD" -> {
                         val label = if (isSale) (if (isGu) "🟡 સોનું મેળવ્યું (Gold Received):" else "🟡 Gold Received:") else (if (isGu) "🟡 સોનું ચૂકવ્યું (Gold Paid):" else "🟡 Gold Paid:")
-                        val formula = p.getFullPaymentFormula(isGu)
-                        sb.append("$label\n   $formula\n")
+                        val breakdown = p.getFormattedBreakdown(isGu)
+                        sb.append("$label\n   $breakdown\n")
                         if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
                         sb.append("\n")
                     }
                     "SILVER" -> {
                         val label = if (isSale) (if (isGu) "⚪ ચાંદી મેળવ્યું (Silver Received):" else "⚪ Silver Received:") else (if (isGu) "⚪ ચાંદી ચૂકવ્યું (Silver Paid):" else "⚪ Silver Paid:")
-                        val formula = p.getFullPaymentFormula(isGu)
-                        sb.append("$label\n   $formula\n")
+                        val breakdown = p.getFormattedBreakdown(isGu)
+                        sb.append("$label\n   $breakdown\n")
                         if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
                         sb.append("\n")
                     }
