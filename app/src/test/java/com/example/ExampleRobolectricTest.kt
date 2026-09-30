@@ -782,9 +782,6 @@ class ExampleRobolectricTest {
     assertEquals(false, amount == enteredRatePerKg * 1000.0)
   }
 
-}
-
-
   @Test
   fun `verify inline silver payment uses kg rate exactly once`() {
     val weightGrams = 1000.0
@@ -797,3 +794,5 @@ class ExampleRobolectricTest {
     assertEquals(234000.0, amount, 0.0001)
     assertNotEquals(234000000.0, amount)
   }
+
+}
