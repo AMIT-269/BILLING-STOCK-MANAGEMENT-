@@ -795,4 +795,29 @@ class ExampleRobolectricTest {
     assertNotEquals(234000000.0, amount)
   }
 
+ 
+  @Test
+  fun `normalize legacy Silver payment amount stored with wrong kg unit`() {
+    val arr = org.json.JSONArray().apply {
+      put(org.json.JSONObject().apply {
+        put("id", "legacy_silver")
+        put("paymentMode", "SILVER")
+        put("amount", 234000000.0) // old broken value: treated ₹/kg as ₹/g
+        put("metalWeight", 1000.0)
+        put("metalTouch", 100.0)
+        put("metalRate", 234000.0) // ₹/kg
+        put("fineWeight", 1000.0)
+      })
+    }
+
+    val bill = com.example.data.model.Bill(
+      id = "bill_legacy_silver",
+      paymentsJson = arr.toString()
+    )
+
+    val payment = bill.parsePayments().single()
+    assertEquals(234000.0, payment.amount, 0.0001)
+    assertNotEquals(234000000.0, payment.amount)
+  }
+
 }
