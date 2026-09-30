@@ -231,10 +231,13 @@ fun CreateBillScreen(
             items.firstOrNull { it.metalType.equals("GOLD", ignoreCase = true) }?.ratePerGram
                 ?: (settings?.goldRate22k ?: 0.0)
         } else (settings?.goldRate22k ?: 0.0)
-        val defaultSilRate = if (items.isNotEmpty()) {
-            items.firstOrNull { it.metalType.equals("SILVER", ignoreCase = true) }?.ratePerGram
-                ?: (settings?.silverRate ?: 0.0)
-        } else (settings?.silverRate ?: 0.0)
+        // BillItem.ratePerGram for Silver is ₹/g; the payment dialog requires ₹/kg.
+        // Convert the item rate once when using it as the payment default.
+        val defaultSilRate = items.firstOrNull { it.metalType.equals("SILVER", ignoreCase = true) }
+            ?.ratePerGram
+            ?.takeIf { it > 0.0 }
+            ?.times(1000.0)
+            ?: 0.0
 
         SplitGoldCashDialog(
             grandTotal = grandTotal,
