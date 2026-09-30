@@ -78,18 +78,42 @@ data class Bill(
             val arr = JSONArray(paymentsJson)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
+                val paymentMode = obj.optString("paymentMode", "CASH").uppercase()
+                val storedAmount = obj.optDouble("amount", 0.0)
+                val metalWeight = obj.optDouble("metalWeight", 0.0)
+                val metalTouch = obj.optDouble("metalTouch", 0.0)
+                val metalRate = obj.optDouble("metalRate", 0.0)
+                val fineWeight = obj.optDouble("fineWeight", 0.0)
+                val effectiveFine = if (fineWeight > 0.0) fineWeight
+                else if (metalTouch > 0.0) metalWeight * metalTouch / 100.0
+                else metalWeight
+
+                // Silver payment rates are stored as ₹/kg, while fine weight is in grams.
+                // Recalculate metal-payment amount from the units so old incorrectly-saved
+                // ₹/g Silver amounts (e.g. ₹234,000,000 instead of ₹234,000) are corrected
+                // when the bill is loaded, previewed, printed, edited, or posted to stock.
+                val normalizedAmount = when (paymentMode) {
+                    "SILVER" -> if (metalRate > 0.0 && effectiveFine > 0.0) {
+                        effectiveFine * (metalRate / 1000.0)
+                    } else storedAmount
+                    "GOLD" -> if (metalRate > 0.0 && effectiveFine > 0.0) {
+                        effectiveFine * metalRate
+                    } else storedAmount
+                    else -> storedAmount
+                }
+
                 list.add(
                     BillPayment(
                         id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                         entryNumber = obj.optInt("entryNumber", i + 1),
                         dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
-                        paymentMode = obj.optString("paymentMode", "CASH"),
-                        amount = obj.optDouble("amount", 0.0),
-                        metalWeight = obj.optDouble("metalWeight", 0.0),
-                        metalTouch = obj.optDouble("metalTouch", 0.0),
-                        metalRate = obj.optDouble("metalRate", 0.0),
+                        paymentMode = paymentMode,
+                        amount = normalizedAmount,
+                        metalWeight = metalWeight,
+                        metalTouch = metalTouch,
+                        metalRate = metalRate,
                         note = obj.optString("note", ""),
-                        fineWeight = obj.optDouble("fineWeight", 0.0)
+                        fineWeight = fineWeight
                     )
                 )
             }
