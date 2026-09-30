@@ -812,6 +812,8 @@ class ExampleRobolectricTest {
 
     val bill = com.example.data.model.Bill(
       id = "bill_legacy_silver",
+      accountId = "test_account",
+      billNumber = "TS-0001",
       paymentsJson = arr.toString()
     )
 
