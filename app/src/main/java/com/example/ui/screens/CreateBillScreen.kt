@@ -1706,9 +1706,12 @@ fun PaymentEntryDialog(
             if (mode == "GOLD" || mode == "SILVER") {
                 val wt = metalWeightText.toDoubleOrNull() ?: 0.0
                 val touch = metalTouchText.toDoubleOrNull() ?: 100.0
-                val rate = metalRateText.toDoubleOrNull() ?: 0.0
-                val effectiveRate = if (mode == "SILVER") (rate / 1000.0) else rate
-                (wt * touch / 100.0) * effectiveRate
+                val enteredRate = metalRateText.toDoubleOrNull() ?: 0.0
+                // Silver payment rate is entered/stored/displayed as ₹/kg.
+                // Convert the kg rate to ₹/g exactly once for gram-based calculation.
+                // Example: 1,000g × 100% × ₹234,000/kg ÷ 1,000 = ₹234,000.
+                val ratePerGram = if (mode == "SILVER") enteredRate / 1000.0 else enteredRate
+                (wt * touch / 100.0) * ratePerGram
             } else {
                 amountText.toDoubleOrNull() ?: 0.0
             }
