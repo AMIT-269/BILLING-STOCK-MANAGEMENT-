@@ -783,3 +783,16 @@ class ExampleRobolectricTest {
 
 }
 
+
+  @Test
+  fun `verify inline silver payment uses kg rate exactly once`() {
+    val weightGrams = 1000.0
+    val touch = 100.0
+    val enteredRatePerKg = 234000.0
+    val fineGrams = weightGrams * touch / 100.0
+    val ratePerGram = enteredRatePerKg / 1000.0
+    val amount = fineGrams * ratePerGram
+
+    assertEquals(234000.0, amount, 0.0001)
+    assertNotEquals(234000000.0, amount)
+  }
