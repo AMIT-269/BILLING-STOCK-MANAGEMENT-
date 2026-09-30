@@ -50,8 +50,13 @@ fun SplitGoldCashDialog(
     val metalTouch = metalTouchText.toDoubleOrNull() ?: (if (metalMode == "GOLD") 80.0 else 100.0)
     val metalRate = metalRateText.toDoubleOrNull() ?: 0.0
     val fineWeight = if (metalWeight > 0.0) (metalWeight * metalTouch / 100.0) else 0.0
-    val effectiveRate = if (metalMode == "SILVER") (metalRate / 1000.0) else metalRate
-    val metalAmount = fineWeight * effectiveRate
+    // Silver rates in this dialog are ALWAYS ₹/kg. Convert to ₹/g exactly once.
+    // Example: 500g × 100% × ₹234,000/kg ÷ 1000 = ₹117,000.
+    val metalAmount = if (metalMode == "SILVER") {
+        fineWeight * metalRate / 1000.0
+    } else {
+        fineWeight * metalRate
+    }
 
     val suggestedCash = (grandTotal - metalAmount).coerceAtLeast(0.0)
     var cashText by remember { mutableStateOf(if (suggestedCash > 0) LanguageManager.formatDouble(suggestedCash, 0) else "") }
@@ -173,7 +178,7 @@ fun SplitGoldCashDialog(
                     onValueChange = { metalRateText = it },
                     label = {
                         Text(
-                            if (metalMode == "SILVER") loc(en = "Silver Current Price (₹/kg or ₹/g)", gu = "ચાંદી વર્તમાન ભાવ (₹/કિલો અથવા ₹/ગ્રા)")
+                            if (metalMode == "SILVER") loc(en = "Silver Current Price (₹/kg)", gu = "ચાંદી વર્તમાન ભાવ (₹/કિલો)")
                             else loc(en = "Gold Current Price (₹/g)", gu = "સોનાનો વર્તમાન ભાવ (₹/ગ્રામ)")
                         )
                     },
