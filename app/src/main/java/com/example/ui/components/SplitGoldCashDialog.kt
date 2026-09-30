@@ -41,7 +41,7 @@ fun SplitGoldCashDialog(
         val initialRate = if (metalMode == "GOLD") {
             if (defaultGoldRate > 0) defaultGoldRate else 10000.0
         } else {
-            if (defaultSilverRate > 0) defaultSilverRate else 90.0
+            defaultSilverRate
         }
         mutableStateOf(if (initialRate > 0) LanguageManager.formatDouble(initialRate, 0) else "")
     }
