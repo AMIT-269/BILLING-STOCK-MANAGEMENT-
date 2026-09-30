@@ -50,7 +50,7 @@ fun SplitGoldCashDialog(
     val metalTouch = metalTouchText.toDoubleOrNull() ?: (if (metalMode == "GOLD") 80.0 else 100.0)
     val metalRate = metalRateText.toDoubleOrNull() ?: 0.0
     val fineWeight = if (metalWeight > 0.0) (metalWeight * metalTouch / 100.0) else 0.0
-    val effectiveRate = if (metalMode == "SILVER" && metalRate > 1000) (metalRate / 1000.0) else metalRate
+    val effectiveRate = if (metalMode == "SILVER") (metalRate / 1000.0) else metalRate
     val metalAmount = fineWeight * effectiveRate
 
     val suggestedCash = (grandTotal - metalAmount).coerceAtLeast(0.0)
