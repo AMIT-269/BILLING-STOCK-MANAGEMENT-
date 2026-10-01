@@ -816,6 +816,7 @@ fun CreateBillScreen(
                         if (paymentMode in listOf("GOLD_CASH", "SILVER_CASH", "GOLD", "SILVER")) {
                             val isGold = paymentMode.startsWith("GOLD")
                             val isSplit = paymentMode.endsWith("_CASH")
+                            val isSale = billType == "SALE"
                             val metalName = if (isGold) loc(en = "Gold", gu = "સોનું") else loc(en = "Silver", gu = "ચાંદી")
                             val defaultRate = if (isGold) (settings?.goldRate22k ?: 7200.0) else 0.0
 
