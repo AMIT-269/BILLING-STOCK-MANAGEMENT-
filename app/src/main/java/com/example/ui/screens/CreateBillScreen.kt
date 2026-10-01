@@ -1423,12 +1423,34 @@ fun ItemEditDialog(
         }
     }
 
-    val calculatedGoldAmount by remember { derivedStateOf { (netWeightText.toDoubleOrNull() ?: 0.0) * (rateText.toDoubleOrNull() ?: 0.0) } }
-    val calculatedGoldLabour by remember { derivedStateOf { calculatedGoldAmount * (makingPercentText.toDoubleOrNull() ?: 0.0) / 100.0 } }
+    // Customer Sale Gold is valued on net weight + labour.
+    // Karigar Purchase Gold is valued on the final fine (weight × (touch + making)%).
+    // Example: 2g × (87% + 3%) = 1.800g fine; at ₹15,000/g = ₹27,000.
+    val calculatedGoldAmount by remember {
+        derivedStateOf {
+            val rate = rateText.toDoubleOrNull() ?: 0.0
+            if (billType == "SALE") {
+                (netWeightText.toDoubleOrNull() ?: 0.0) * rate
+            } else {
+                calculatedTotalFine * rate
+            }
+        }
+    }
+    val calculatedGoldLabour by remember {
+        derivedStateOf {
+            if (billType == "SALE") {
+                calculatedGoldAmount * (makingPercentText.toDoubleOrNull() ?: 0.0) / 100.0
+            } else {
+                0.0
+            }
+        }
+    }
     val calculatedTotal by remember {
         derivedStateOf {
-            if (metalType == "GOLD") calculatedGoldAmount + calculatedGoldLabour
-            else {
+            if (metalType == "GOLD") {
+                if (billType == "SALE") calculatedGoldAmount + calculatedGoldLabour
+                else calculatedGoldAmount
+            } else {
                 val rate = rateText.toDoubleOrNull() ?: 0.0
                 calculatedTotalFine * (rate / 1000.0) + calculatedRupeeMaking
             }
@@ -1790,7 +1812,7 @@ fun ItemEditDialog(
                         totalTouch = totalTouch,
                         totalFine = totalFine,
                         ratePerGram = rate,
-                        makingCharges = if (metalType == "GOLD") calculatedGoldLabour else rupeeMaking,
+                        makingCharges = if (metalType == "GOLD" && billType == "SALE") calculatedGoldLabour else rupeeMaking,
                         itemTotal = total,
                         stockClassification = stockClassification
                     )
