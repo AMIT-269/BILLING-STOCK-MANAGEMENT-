@@ -1724,9 +1724,16 @@ fun ItemEditDialog(
                                 Text("Gold Amount:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(LanguageManager.formatCurrency(calculatedGoldAmount), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Labour:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${LanguageManager.formatDouble(makingPercentText.toDoubleOrNull() ?: 0.0, 1)}% = ${LanguageManager.formatCurrency(calculatedGoldLabour)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                            if (billType == "KARIGAR_PURCHASE") {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Fine Gold:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${LanguageManager.formatDouble(calculatedTotalFine, 3)}g", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            } else {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Labour:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("${LanguageManager.formatDouble(makingPercentText.toDoubleOrNull() ?: 0.0, 1)}% = ${LanguageManager.formatCurrency(calculatedGoldLabour)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                }
                             }
                         } else Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(loc(en = "Touch %:", gu = "ટચ %:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1738,7 +1745,7 @@ fun ItemEditDialog(
                                 Text("+${makingPercentText}%", fontWeight = FontWeight.Medium, fontSize = 12.sp)
                             }
                         }
-                        if (calculatedRupeeMaking > 0.0) {
+                        if (calculatedRupeeMaking > 0.0 && metalType == "SILVER") {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(loc(en = "Making (₹):", gu = "મજૂરી (₹):"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("+₹${LanguageManager.formatDouble(calculatedRupeeMaking, 0)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
