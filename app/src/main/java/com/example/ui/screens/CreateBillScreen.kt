@@ -62,6 +62,9 @@ fun CreateBillScreen(
     var partyName by remember { mutableStateOf("") }
     var partyMobile by remember { mutableStateOf("") }
     var partyAddress by remember { mutableStateOf("") }
+    var partyAadharNumber by remember { mutableStateOf("") }
+    var partyPanNumber by remember { mutableStateOf("") }
+    var partyGstNumber by remember { mutableStateOf("") }
     var paymentMode by remember { mutableStateOf("CASH") }
     var notes by remember { mutableStateOf("") }
 
@@ -107,6 +110,9 @@ fun CreateBillScreen(
                 partyName = b.partyName
                 partyMobile = b.partyMobile
                 partyAddress = b.partyAddress
+                partyAadharNumber = b.partyAadharNumber
+                partyPanNumber = b.partyPanNumber
+                partyGstNumber = b.partyGstNumber
                 paymentMode = b.paymentMode
                 notes = b.notes
                 discountText = if (b.discount > 0) LanguageManager.formatDouble(b.discount, 0) else "0"
@@ -490,6 +496,40 @@ fun CreateBillScreen(
                             label = { Text(AppStrings.partyAddress()) },
                             leadingIcon = { Icon(Icons.Default.Place, contentDescription = null, tint = GoldDark) },
                             modifier = Modifier.fillMaxWidth().testTag("bill_party_address"),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = partyAadharNumber,
+                            onValueChange = { if (it.length <= 12 && it.all { c -> c.isDigit() }) partyAadharNumber = it },
+                            label = { Text("Customer Aadhaar Card No.") },
+                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = GoldDark) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth().testTag("bill_party_aadhaar"),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = partyPanNumber,
+                            onValueChange = { partyPanNumber = it.uppercase().take(10) },
+                            label = { Text("Customer PAN Card No.") },
+                            leadingIcon = { Icon(Icons.Default.CreditCard, contentDescription = null, tint = GoldDark) },
+                            modifier = Modifier.fillMaxWidth().testTag("bill_party_pan"),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = partyGstNumber,
+                            onValueChange = { partyGstNumber = it.uppercase() },
+                            label = { Text("Customer GST No.") },
+                            leadingIcon = { Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = GoldDark) },
+                            modifier = Modifier.fillMaxWidth().testTag("bill_party_gst"),
                             singleLine = true
                         )
                     }
@@ -1163,6 +1203,9 @@ fun CreateBillScreen(
                             partyName = partyName.trim(),
                             partyMobile = partyMobile.trim(),
                             partyAddress = partyAddress.trim(),
+                            partyAadharNumber = partyAadharNumber.trim(),
+                            partyPanNumber = partyPanNumber.trim().uppercase(),
+                            partyGstNumber = partyGstNumber.trim().uppercase(),
                             paymentMode = resolvedPaymentMode,
                             dateTimestamp = if (isEditMode) existingBillDateTimestamp else System.currentTimeMillis(),
                             itemsJson = Bill.itemsToJson(items),
