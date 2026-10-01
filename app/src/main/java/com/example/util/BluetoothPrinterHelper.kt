@@ -464,12 +464,23 @@ object BluetoothPrinterHelper {
         writeLine("--------------------------------")
 
         val items = bill.parseItems()
+        val goldOnly = items.isNotEmpty() && items.all { it.metalType.equals("GOLD", ignoreCase = true) }
         for (item in items) {
+            if (goldOnly) {
+                val metalPurity = if (item.purity.isNotBlank()) "Gold / ${item.purity}" else "Gold"
+                val goldAmount = item.netWeight * item.ratePerGram
+                val labour = if (item.makingCharges > 0) item.makingCharges else goldAmount * item.makingChargePercent / 100.0
+                writeLine(String.format(Locale.US, "%d | %s | %s", items.indexOf(item) + 1, item.description.take(14), metalPurity.take(18)))
+                writeLine(String.format(Locale.US, "  Gross: %.3fg | Net: %.3fg | Rate: Rs. %.0f/g", item.grossWeight, item.netWeight, item.ratePerGram))
+                writeLine(String.format(Locale.US, "  Gold Amount: Rs. %.2f | Labour: %.1f%% = Rs. %.2f", goldAmount, item.makingChargePercent, labour))
+                writeLine(String.format(Locale.US, "  Total Amount: Rs. %.2f", item.itemTotal))
+            } else {
             val purityTag = if (item.purity.isNotBlank()) " ${item.purity}" else ""
             val namePurity = "${item.description}$purityTag".take(14)
             val wt = String.format(Locale.US, "%.3f", if (item.netWeight > 0) item.netWeight else item.grossWeight)
             val total = String.format(Locale.US, "%.2f", item.itemTotal)
             writeLine(String.format(Locale.US, "%-13s|%6s|%11s", namePurity, wt, total))
+            }
         }
 
         writeLine("--------------------------------")
