@@ -306,6 +306,30 @@ fun BillPreviewScreen(
                         Text(AppStrings.printThermal(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        bill?.let { selectedBill ->
+                            viewModel.printBillViaUsb(context, selectedBill) { _, _ -> }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Charcoal),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("print_usb_bill_btn")
+                ) {
+                    Icon(Icons.Default.Usb, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        loc(en = "Print via USB / OTG", gu = "USB / OTG થી પ્રિન્ટ"),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         },
         containerColor = MaterialTheme.colorScheme.background
