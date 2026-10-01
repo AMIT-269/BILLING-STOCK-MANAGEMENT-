@@ -472,7 +472,7 @@ object BluetoothPrinterHelper {
                 writeLine(String.format(Locale.US, "%d | %s | %s", items.indexOf(item) + 1, item.description.take(14), metalPurity.take(18)))
                 val baseFineAmount = (item.netWeight * item.currentTouch / 100.0) * item.ratePerGram
                 val labourAmount = (item.itemTotal - baseFineAmount).coerceAtLeast(0.0)
-                writeLine(String.format(Locale.US, "  Labour: Rs. %.2f | Gross: %.3fg | Net: %.3fg", labourAmount, item.grossWeight, item.netWeight))
+                writeLine(String.format(Locale.US, "  Labour: %.1f%% | Gross: %.3fg | Net: %.3fg", item.makingChargePercent, item.grossWeight, item.netWeight))
                 writeLine(String.format(Locale.US, "  Fine Gold: %.3fg | Gold Rate: Rs. %.0f/g", item.totalFine, item.ratePerGram))
                 writeLine(String.format(Locale.US, "  Amount: Rs. %.2f", item.itemTotal))
             } else if (goldOnly) {
