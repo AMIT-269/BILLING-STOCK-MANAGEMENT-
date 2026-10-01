@@ -602,6 +602,8 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
         contactNumber: String,
         goldRate22k: Double,
         silverRate: Double,
+        goldHsnCode: String = "",
+        silverHsnCode: String = "",
         language: String = "en",
         onSuccess: () -> Unit
     ) {
@@ -618,6 +620,8 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
                     contactNumber = contactNumber.trim().ifBlank { account.mobileNumber },
                     goldRate22k = goldRate22k,
                     silverRate = silverRate,
+                    goldHsnCode = goldHsnCode.trim(),
+                    silverHsnCode = silverHsnCode.trim(),
                     language = language,
                     updatedAt = System.currentTimeMillis()
                 )
