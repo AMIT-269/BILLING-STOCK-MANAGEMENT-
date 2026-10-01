@@ -632,6 +632,28 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    // USB/OTG ESC/POS Printing
+    fun printBillViaUsb(
+        context: android.content.Context,
+        bill: Bill,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                BluetoothPrinterHelper.printBillViaUsb(context, bill, settings.value) { success, message ->
+                    _isLoading.value = false
+                    _userMessage.value = if (success) "USB print successful" else "USB printing failed: $message"
+                    onResult(success, message)
+                }
+            } catch (e: Exception) {
+                _isLoading.value = false
+                _userMessage.value = "USB printing failed: ${e.message}"
+                onResult(false, e.message ?: "USB printing failed")
+            }
+        }
+    }
+
     // Bluetooth Printing
     fun getPairedBluetoothPrinters(): List<BluetoothPrinterHelper.BluetoothPrinterDevice> {
         return BluetoothPrinterHelper.getPairedPrinters()
