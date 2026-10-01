@@ -712,8 +712,8 @@ fun CreateBillScreen(
                                 selected = paymentMode == "GOLD_CASH",
                                 onClick = {
                                     paymentMode = "GOLD_CASH"
-                                    if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "6.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
+                                    inlineMetalWeightText = ""
+                                    inlineMetalTouchText = ""
                                     if (inlineMetalRateText.isBlank()) {
                                         val defRate = settings?.goldRate22k ?: 7200.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
@@ -726,8 +726,8 @@ fun CreateBillScreen(
                                 selected = paymentMode == "SILVER_CASH",
                                 onClick = {
                                     paymentMode = "SILVER_CASH"
-                                    if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "100.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
+                                    inlineMetalWeightText = ""
+                                    inlineMetalTouchText = ""
                                     if (inlineMetalRateText.isBlank()) {
                                         val defRate = 0.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
@@ -855,7 +855,7 @@ fun CreateBillScreen(
                                                 syncInlinePayments(it, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText)
                                             },
                                             label = { Text(loc(en = "$metalName Wt (g)", gu = "$metalName વજન (ગ્રા)")) },
-                                            placeholder = { Text("6.000") },
+                                            placeholder = { Text("0.000") },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                             modifier = Modifier.weight(1f),
                                             singleLine = true
