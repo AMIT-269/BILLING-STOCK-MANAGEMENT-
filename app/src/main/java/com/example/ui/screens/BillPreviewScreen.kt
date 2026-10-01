@@ -1344,7 +1344,7 @@ fun SplitGoldCashDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "${loc(en = "Fine:", gu = "ફાઇન:")} ${LanguageManager.formatDouble(fineWeight, 3)}g",
+                            text = if (billType == "SALE") "" else "${loc(en = "Fine:", gu = "ફાઇન:")} ${LanguageManager.formatDouble(fineWeight, 3)}g",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
