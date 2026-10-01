@@ -1264,6 +1264,24 @@ fun ItemEditDialog(
     }
     var metalType by remember { mutableStateOf(initialItem?.metalType ?: "GOLD") }
     var purityText by remember { mutableStateOf(initialItem?.purity ?: "") }
+    // Gold can be entered as Karat, Touch/Purity, or both (for example 22K / 916).
+    var goldKaratText by remember {
+        mutableStateOf(
+            initialItem?.purity
+                ?.substringBefore("/")
+                ?.trim()
+                ?.removeSuffix("K")
+                ?.removeSuffix("k")
+                ?.takeIf { it.isNotBlank() } ?: ""
+        )
+    }
+    var goldTouchText by remember {
+        mutableStateOf(
+            initialItem?.currentTouch
+                ?.takeIf { it > 0 }
+                ?.let { LanguageManager.formatDouble(it, 1) } ?: ""
+        )
+    }
     var stockClassification by remember {
         mutableStateOf(initialItem?.stockClassification ?: "JEWELLERY")
     }
@@ -1298,11 +1316,12 @@ fun ItemEditDialog(
             if (userTouch != null && userTouch > 0) {
                 userTouch
             } else if (metalType == "GOLD") {
-                val cleanK = purityText.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
-                if (cleanK != null && cleanK > 0) {
-                    (cleanK / 24.0) * 100.0
+                val explicitTouch = goldTouchText.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
+                if (explicitTouch != null && explicitTouch > 0) {
+                    if (explicitTouch > 100.0 && explicitTouch <= 1000.0) explicitTouch / 10.0 else explicitTouch
                 } else {
-                    0.0
+                    val cleanK = goldKaratText.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
+                    if (cleanK != null && cleanK > 0) (cleanK / 24.0) * 100.0 else 0.0
                 }
             } else {
                 val cleanP = purityText.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
@@ -1372,6 +1391,8 @@ fun ItemEditDialog(
                         onClick = {
                             metalType = "GOLD"
                             purityText = ""
+                            goldKaratText = ""
+                            goldTouchText = ""
                             currentTouchText = ""
                         },
                         label = { Text(AppStrings.gold()) },
@@ -1394,27 +1415,42 @@ fun ItemEditDialog(
                 // Manual Gold Karat or Manual Silver Touch/Purity Input
                 if (metalType == "GOLD") {
                     Text(
-                        text = loc(en = "Gold Karat (Manual Input)", gu = "સોનાનું કેરેટ (મેન્યુઅલ દાખલ કરો)"),
+                        text = loc(en = "Gold Karat + Touch / Purity (Optional)", gu = "સોનું કેરેટ + ટચ / પ્યોરિટી (વૈકલ્પિક)"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = purityText,
-                        onValueChange = { input ->
-                            purityText = input
-                            val cleanK = input.filter { it.isDigit() || it == '.' }.toDoubleOrNull()
-                            if (cleanK != null && cleanK > 0) {
-                                val autoTouch = (cleanK / 24.0) * 100.0
-                                currentTouchText = LanguageManager.formatDouble(autoTouch, 1)
-                            }
-                        },
-                        label = { Text(loc(en = "Gold Karat", gu = "સોનું કેરેટ")) },
-                        placeholder = { Text(loc(en = "e.g. 20, 22, 18, 24", gu = "દા.ત. 20, 22, 18, 24")) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth().testTag("dialog_item_gold_karat"),
-                        singleLine = true
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = goldKaratText,
+                            onValueChange = { goldKaratText = it },
+                            label = { Text(loc(en = "Gold Karat", gu = "સોનું કેરેટ")) },
+                            placeholder = { Text("22") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f).testTag("dialog_item_gold_karat"),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = goldTouchText,
+                            onValueChange = { goldTouchText = it },
+                            label = { Text(loc(en = "Touch / Purity", gu = "ટચ / પ્યોરિટી")) },
+                            placeholder = { Text("916 or 91.6") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f).testTag("dialog_item_gold_touch"),
+                            singleLine = true
+                        )
+                    }
+                    Text(
+                        text = loc(
+                            en = "Enter either one, or both (example: 22K / 916).",
+                            gu = "એક, અથવા બંને લખી શકો (ઉદાહરણ: 22K / 916)."
+                        ),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
@@ -1638,13 +1674,18 @@ fun ItemEditDialog(
                         if (metalType == "GOLD") "Gold Jewellery" else "Silver Jewellery"
                     }
 
-                    // Format Gold Karat as "20K", Silver Touch as "65%" (leave blank if not mentioned)
+                    // Gold purity may contain Karat, Touch/Purity, or both.
+                    // Examples: "22K", "916", or "22K / 916".
                     val finalPurity = if (metalType == "GOLD") {
-                        val cleanK = purityText.trim().filter { it.isDigit() || it == '.' }
-                        if (cleanK.isNotBlank()) {
-                            if (purityText.trim().endsWith("K", ignoreCase = true)) purityText.trim().uppercase() else "${cleanK}K"
-                        } else {
-                            ""
+                        val cleanK = goldKaratText.trim().filter { it.isDigit() || it == '.' }
+                        val cleanTouch = goldTouchText.trim().filter { it.isDigit() || it == '.' }
+                        val karatLabel = if (cleanK.isNotBlank()) "${cleanK}K" else ""
+                        val touchLabel = if (cleanTouch.isNotBlank()) cleanTouch else ""
+                        when {
+                            karatLabel.isNotBlank() && touchLabel.isNotBlank() -> "$karatLabel / $touchLabel"
+                            karatLabel.isNotBlank() -> karatLabel
+                            touchLabel.isNotBlank() -> touchLabel
+                            else -> ""
                         }
                     } else {
                         val cleanP = purityText.trim().filter { it.isDigit() || it == '.' }
