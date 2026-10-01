@@ -14,6 +14,8 @@ data class JewellerSettings(
     val contactNumber: String = "",
     val goldRate22k: Double = 0.0,
     val silverRate: Double = 0.0,
+    val goldHsnCode: String = "",
+    val silverHsnCode: String = "",
     val language: String = "en",
     val updatedAt: Long = System.currentTimeMillis()
 )
