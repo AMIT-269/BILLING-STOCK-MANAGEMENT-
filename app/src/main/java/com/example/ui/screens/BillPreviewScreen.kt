@@ -1240,15 +1240,18 @@ fun SplitGoldCashDialog(
 ) {
     var goldWeightText by remember { mutableStateOf("") }
     var goldTouchText by remember { mutableStateOf("") }
-    var goldRateText by remember {
-        mutableStateOf(if (defaultGoldRate > 0) LanguageManager.formatDouble(defaultGoldRate, 0) else "")
-    }
+    // Payment metal weight, touch/making and current rate are entered manually; no auto-filled 6g/old rate.
+    var goldRateText by remember { mutableStateOf("") }
+    var goldMakingText by remember { mutableStateOf("") }
 
     val goldWeight = goldWeightText.toDoubleOrNull() ?: 0.0
     val goldTouch = goldTouchText.toDoubleOrNull() ?: 0.0
+    val goldMaking = if (billType == "SALE") 0.0 else (goldMakingText.toDoubleOrNull() ?: 0.0)
+    val totalGoldTouch = goldTouch + goldMaking
     val goldRate = goldRateText.toDoubleOrNull() ?: 0.0
-    val fineWeight = (goldWeight * goldTouch / 100.0)
-    // Customer Sale gold payment value is weight × manual rate. Touch is used only for owner-side fine accounting.
+    val fineWeight = (goldWeight * totalGoldTouch / 100.0)
+    // Customer Sale: amount = physical weight × manual rate; touch is owner-side fine only.
+    // Karigar Purchase: amount = fine weight × current rate, including manual making charge.
     val goldAmount = if (billType == "SALE") goldWeight * goldRate else fineWeight * goldRate
 
     val suggestedCash = (grandTotal - goldAmount).coerceAtLeast(0.0)
@@ -1324,6 +1327,18 @@ fun SplitGoldCashDialog(
                     )
                 }
 
+                if (billType != "SALE") {
+                    OutlinedTextField(
+                        value = goldMakingText,
+                        onValueChange = { goldMakingText = it },
+                        label = { Text(loc(en = "Making Charge %", gu = "મેકિંગ ચાર્જ %")) },
+                        placeholder = { Text("0.0") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+
                 OutlinedTextField(
                     value = goldRateText,
                     onValueChange = { goldRateText = it },
@@ -1345,7 +1360,7 @@ fun SplitGoldCashDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (billType == "SALE") "" else "${loc(en = "Fine:", gu = "ફાઇન:")} ${LanguageManager.formatDouble(fineWeight, 3)}g",
+                            text = if (billType == "SALE") "" else "${loc(en = "Fine:", gu = "ફાઇન:")} ${LanguageManager.formatDouble(fineWeight, 3)}g (${LanguageManager.formatDouble(totalGoldTouch, 1)}% total)",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1405,7 +1420,7 @@ fun SplitGoldCashDialog(
                         paymentMode = "GOLD",
                         amount = goldAmount,
                         metalWeight = goldWeight,
-                        metalTouch = goldTouch,
+                        metalTouch = totalGoldTouch,
                         metalRate = goldRate,
                         fineWeight = fineWeight,
                         note = if (isSale) "Gold received (વેચાણ બિલ સોનું)" else "Gold paid (ખરીદી બિલ સોનું)"
