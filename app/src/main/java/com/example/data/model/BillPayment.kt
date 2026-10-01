@@ -37,7 +37,7 @@ data class BillPayment(
      * Formats full mathematical breakdown exactly matching jeweler manual receipt:
      * e.g., "6.000g . 80% = 4.800 Fine × Current Price (10000) = ₹48,000"
      */
-    fun getFullPaymentFormula(isGu: Boolean = false): String {
+    fun getFullPaymentFormula(isGu: Boolean = false, isSale: Boolean = false): String {
         if (!paymentMode.equals("GOLD", ignoreCase = true) && !paymentMode.equals("SILVER", ignoreCase = true)) {
             return LanguageManager.formatCurrency(amount)
         }
@@ -51,7 +51,11 @@ data class BillPayment(
         val priceLabel = if (isGu) "ભાવ" else "PRICE"
 
         val formula = StringBuilder()
-        formula.append("${LanguageManager.formatDouble(metalWeight, 3)}$wtUnit . $touchStr = ${LanguageManager.formatDouble(fine, 3)}$wtUnit $fineLabel")
+        if (isSale) {
+            formula.append("${LanguageManager.formatDouble(metalWeight, 3)}$wtUnit")
+        } else {
+            formula.append("${LanguageManager.formatDouble(metalWeight, 3)}$wtUnit . $touchStr = ${LanguageManager.formatDouble(fine, 3)}$wtUnit $fineLabel")
+        }
         if (metalRate > 0) {
             formula.append(" × $priceLabel (${LanguageManager.formatDouble(metalRate, 0)}$rateUnit)")
         }
@@ -59,7 +63,7 @@ data class BillPayment(
         return formula.toString()
     }
 
-    fun getFormattedBreakdown(isGu: Boolean = false): String {
+    fun getFormattedBreakdown(isGu: Boolean = false, isSale: Boolean = false): String {
         if (!paymentMode.equals("GOLD", ignoreCase = true) && !paymentMode.equals("SILVER", ignoreCase = true)) {
             return ""
         }
@@ -75,7 +79,7 @@ data class BillPayment(
         return buildList {
             if (metalWeight > 0) add("${LanguageManager.formatDouble(metalWeight, 3)}$wtUnit")
             if (touchStr.isNotEmpty()) add(touchStr)
-            add(fineStr)
+            if (!isSale) add(fineStr)
             if (metalRate > 0) add("₹${LanguageManager.formatDouble(metalRate, 0)}$rateUnit")
             add(valStr)
         }.joinToString(" | ")
