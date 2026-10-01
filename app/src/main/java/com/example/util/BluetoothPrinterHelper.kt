@@ -525,7 +525,11 @@ object BluetoothPrinterHelper {
                         writeLine(label)
                         write(ESC_BOLD_OFF)
                         val touchStr = if (p.metalTouch > 0) String.format(Locale.US, "%.1f%%", p.metalTouch) else "100%"
-                        writeLine(String.format(Locale.US, "  %.3fg . %s = %.3fg Fine", p.metalWeight, touchStr, fine))
+                        if (!isSale) {
+                            writeLine(String.format(Locale.US, "  %.3fg . %s = %.3fg Fine", p.metalWeight, touchStr, fine))
+                        } else {
+                            writeLine(String.format(Locale.US, "  %.3fg", p.metalWeight))
+                        }
                         if (p.metalRate > 0) {
                             writeLine(String.format(Locale.US, "  x Price: Rs. %.0f/g", p.metalRate))
                         }
