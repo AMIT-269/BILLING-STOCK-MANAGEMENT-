@@ -21,6 +21,9 @@ data class Bill(
     val partyName: String = "",
     val partyMobile: String = "",
     val partyAddress: String = "",
+    val partyAadharNumber: String = "",
+    val partyPanNumber: String = "",
+    val partyGstNumber: String = "",
     val paymentMode: String = "CASH", // "CASH", "GOLD", "SILVER", "ONLINE", "CHEQUE"
     val dateTimestamp: Long = System.currentTimeMillis(),
     val itemsJson: String = "[]",
