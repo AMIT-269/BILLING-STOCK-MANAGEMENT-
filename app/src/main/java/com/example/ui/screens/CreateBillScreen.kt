@@ -1055,7 +1055,7 @@ fun CreateBillScreen(
                                                 )
                                                 if (p.metalWeight > 0) {
                                                     Text(
-                                                        text = p.getFormattedBreakdown(isGu),
+                                                        text = p.getFormattedBreakdown(isGu, isSale),
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = GoldDark
@@ -1696,14 +1696,6 @@ fun ItemEditDialog(
                                 Text(loc(en = "Making %:", gu = "મજૂરી %:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("+${makingPercentText}%", fontWeight = FontWeight.Medium, fontSize = 12.sp)
                             }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("${AppStrings.totalTouch()}:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${LanguageManager.formatDouble(calculatedTotalTouch, 1)}%", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("${AppStrings.totalFine()}:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(LanguageManager.formatWeight(calculatedTotalFine, isGu), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         if (calculatedRupeeMaking > 0.0) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
