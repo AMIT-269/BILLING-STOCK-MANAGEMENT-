@@ -1531,6 +1531,10 @@ class CloudSyncManager private constructor(private val context: Context) {
                             isGstBill = obj.optBoolean("isGstBill", false),
                             partyName = obj.optString("partyName"),
                             partyMobile = obj.optString("partyMobile"),
+                            partyAddress = obj.optString("partyAddress"),
+                            partyAadharNumber = obj.optString("partyAadharNumber"),
+                            partyPanNumber = obj.optString("partyPanNumber"),
+                            partyGstNumber = obj.optString("partyGstNumber"),
                             dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
                             itemsJson = obj.optString("itemsJson", "[]"),
                             subtotal = obj.optDouble("subtotal", 0.0),
@@ -1671,6 +1675,10 @@ class CloudSyncManager private constructor(private val context: Context) {
                         "isGstBill" to bill.isGstBill,
                         "partyName" to bill.partyName,
                         "partyMobile" to bill.partyMobile,
+                        "partyAddress" to bill.partyAddress,
+                        "partyAadharNumber" to bill.partyAadharNumber,
+                        "partyPanNumber" to bill.partyPanNumber,
+                        "partyGstNumber" to bill.partyGstNumber,
                         "dateTimestamp" to bill.dateTimestamp,
                         "itemsJson" to bill.itemsJson,
                         "subtotal" to bill.subtotal,
@@ -1719,6 +1727,10 @@ class CloudSyncManager private constructor(private val context: Context) {
                 put("isGstBill", bill.isGstBill)
                 put("partyName", bill.partyName)
                 put("partyMobile", bill.partyMobile)
+                put("partyAddress", bill.partyAddress)
+                put("partyAadharNumber", bill.partyAadharNumber)
+                put("partyPanNumber", bill.partyPanNumber)
+                put("partyGstNumber", bill.partyGstNumber)
                 put("dateTimestamp", bill.dateTimestamp)
                 put("itemsJson", bill.itemsJson)
                 put("subtotal", bill.subtotal)
