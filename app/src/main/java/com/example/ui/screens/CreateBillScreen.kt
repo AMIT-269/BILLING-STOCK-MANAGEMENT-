@@ -74,7 +74,7 @@ fun CreateBillScreen(
 
     // Inline Metal Payment fields (for Gold + Cash, Silver + Cash, or pure metal payment)
     var inlineMetalWeightText by remember { mutableStateOf("") }
-    var inlineMetalTouchText by remember { mutableStateOf("80.0") }
+    var inlineMetalTouchText by remember { mutableStateOf("") }
     var inlineMetalRateText by remember { mutableStateOf("") }
     var inlineRemainingCashText by remember { mutableStateOf("") }
 
@@ -713,7 +713,7 @@ fun CreateBillScreen(
                                 onClick = {
                                     paymentMode = "GOLD_CASH"
                                     if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "6.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = "80.0"
+                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
                                     if (inlineMetalRateText.isBlank()) {
                                         val defRate = settings?.goldRate22k ?: 7200.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
@@ -727,7 +727,7 @@ fun CreateBillScreen(
                                 onClick = {
                                     paymentMode = "SILVER_CASH"
                                     if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "100.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = "70.0"
+                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
                                     if (inlineMetalRateText.isBlank()) {
                                         val defRate = 0.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
@@ -743,7 +743,7 @@ fun CreateBillScreen(
                                 onClick = {
                                     paymentMode = "GOLD"
                                     if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "6.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = "80.0"
+                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
                                     if (inlineMetalRateText.isBlank()) {
                                         val defRate = settings?.goldRate22k ?: 7200.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
@@ -757,7 +757,7 @@ fun CreateBillScreen(
                                 onClick = {
                                     paymentMode = "SILVER"
                                     if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "100.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = "70.0"
+                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
                                     if (inlineMetalRateText.isBlank()) {
                                         val defRate = 0.0
                                         if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
@@ -1746,7 +1746,7 @@ fun PaymentEntryDialog(
         mutableStateOf(if (initialPayment != null && initialPayment.metalWeight > 0) LanguageManager.formatDouble(initialPayment.metalWeight, 3) else "")
     }
     var metalTouchText by remember {
-        mutableStateOf(if (initialPayment != null && initialPayment.metalTouch > 0) LanguageManager.formatDouble(initialPayment.metalTouch, 1) else if (mode == "GOLD") "99.5" else "100.0")
+        mutableStateOf(if (initialPayment != null && initialPayment.metalTouch > 0) LanguageManager.formatDouble(initialPayment.metalTouch, 1) else "")
     }
     // Rate starts completely empty by default
     var metalRateText by remember {
@@ -1804,7 +1804,7 @@ fun PaymentEntryDialog(
                         selected = mode == "GOLD",
                         onClick = {
                             mode = "GOLD"
-                            metalTouchText = "99.5"
+                            metalTouchText = ""
                         },
                         label = { Text(AppStrings.modeGold(), fontSize = 11.sp) },
                         modifier = Modifier.weight(1f)
@@ -1813,7 +1813,7 @@ fun PaymentEntryDialog(
                         selected = mode == "SILVER",
                         onClick = {
                             mode = "SILVER"
-                            metalTouchText = "100.0"
+                            metalTouchText = ""
                         },
                         label = { Text(AppStrings.modeSilver(), fontSize = 11.sp) },
                         modifier = Modifier.weight(1f)
