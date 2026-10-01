@@ -789,7 +789,7 @@ fun CreateBillScreen(
 
                             val syncInlinePayments: (String, String, String, String) -> Unit = { wtS, touchS, rateS, cashS ->
                                 val wt = wtS.toDoubleOrNull() ?: 0.0
-                                val touch = touchS.toDoubleOrNull() ?: (if (isGold) 80.0 else 70.0)
+                                val touch = touchS.toDoubleOrNull() ?: 0.0
                                 val rate = rateS.toDoubleOrNull() ?: defaultRate
                                 val fine = if (wt > 0) wt * touch / 100.0 else 0.0
                                 // Silver payment rate is ₹/kg; convert to ₹/g exactly once.
@@ -889,7 +889,7 @@ fun CreateBillScreen(
                                     )
 
                                     val currWt = inlineMetalWeightText.toDoubleOrNull() ?: 0.0
-                                    val currTouch = inlineMetalTouchText.toDoubleOrNull() ?: (if (isGold) 80.0 else 70.0)
+                                    val currTouch = inlineMetalTouchText.toDoubleOrNull() ?: 0.0
                                     val currRate = inlineMetalRateText.toDoubleOrNull() ?: defaultRate
                                     val currFine = if (currWt > 0) currWt * currTouch / 100.0 else 0.0
                                     // Silver payment rate is entered in ₹/kg; convert to ₹/g for amount display.
@@ -1758,7 +1758,7 @@ fun PaymentEntryDialog(
         derivedStateOf {
             if (mode == "GOLD" || mode == "SILVER") {
                 val wt = metalWeightText.toDoubleOrNull() ?: 0.0
-                val touch = metalTouchText.toDoubleOrNull() ?: 100.0
+                val touch = metalTouchText.toDoubleOrNull() ?: 0.0
                 val enteredRate = metalRateText.toDoubleOrNull() ?: 0.0
                 // Silver payment rate is entered/stored/displayed as ₹/kg.
                 // Convert the kg rate to ₹/g exactly once for gram-based calculation.
@@ -1884,7 +1884,7 @@ fun PaymentEntryDialog(
 
                     // Live Mathematical Formula Box (Exact matching handwritten paper)
                     val wt = metalWeightText.toDoubleOrNull() ?: 0.0
-                    val touch = metalTouchText.toDoubleOrNull() ?: (if (mode == "GOLD") 80.0 else 100.0)
+                    val touch = metalTouchText.toDoubleOrNull() ?: 0.0
                     val fine = if (wt > 0.0) (wt * touch / 100.0) else 0.0
                     val rate = metalRateText.toDoubleOrNull() ?: 0.0
                     val rateUnit = if (mode == "SILVER") (if (isGu) "/કિલો" else "/kg") else (if (isGu) "/ગ્રા" else "/g")
@@ -1965,7 +1965,7 @@ fun PaymentEntryDialog(
                 onClick = {
                     val finalAmount = calculatedAmount
                     val wt = if (mode == "GOLD" || mode == "SILVER") (metalWeightText.toDoubleOrNull() ?: 0.0) else 0.0
-                    val touch = if (mode == "GOLD" || mode == "SILVER") (metalTouchText.toDoubleOrNull() ?: 100.0) else 0.0
+                    val touch = if (mode == "GOLD" || mode == "SILVER") (metalTouchText.toDoubleOrNull() ?: 0.0) else 0.0
                     val rate = if (mode == "GOLD" || mode == "SILVER") (metalRateText.toDoubleOrNull() ?: 0.0) else 0.0
                     val fine = if (wt > 0.0) (wt * touch / 100.0) else 0.0
 
