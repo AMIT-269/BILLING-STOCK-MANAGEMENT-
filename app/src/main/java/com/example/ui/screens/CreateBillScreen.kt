@@ -1332,6 +1332,7 @@ fun ItemEditDialog(
     var weightText by remember {
         mutableStateOf(if (initialItem != null && initialItem.grossWeight > 0) LanguageManager.formatDouble(initialItem.grossWeight, 3) else "")
     }
+    var netWeightText by remember { mutableStateOf(if (initialItem != null && initialItem.netWeight > 0) LanguageManager.formatDouble(initialItem.netWeight, 3) else "") }
     var currentTouchText by remember {
         mutableStateOf(if (initialItem != null && initialItem.currentTouch > 0) LanguageManager.formatDouble(initialItem.currentTouch, 1) else "")
     }
@@ -1403,12 +1404,15 @@ fun ItemEditDialog(
         }
     }
 
+    val calculatedGoldAmount by remember { derivedStateOf { (netWeightText.toDoubleOrNull() ?: 0.0) * (rateText.toDoubleOrNull() ?: 0.0) } }
+    val calculatedGoldLabour by remember { derivedStateOf { calculatedGoldAmount * (makingPercentText.toDoubleOrNull() ?: 0.0) / 100.0 } }
     val calculatedTotal by remember {
         derivedStateOf {
-            val rate = rateText.toDoubleOrNull() ?: 0.0
-            val effectiveRate = if (metalType == "SILVER") (rate / 1000.0) else rate
-            val metalAmount = calculatedTotalFine * effectiveRate
-            metalAmount + calculatedRupeeMaking
+            if (metalType == "GOLD") calculatedGoldAmount + calculatedGoldLabour
+            else {
+                val rate = rateText.toDoubleOrNull() ?: 0.0
+                calculatedTotalFine * (rate / 1000.0) + calculatedRupeeMaking
+            }
         }
     }
 
@@ -1561,12 +1565,24 @@ fun ItemEditDialog(
                     OutlinedTextField(
                         value = weightText,
                         onValueChange = { weightText = it },
-                        label = { Text(AppStrings.weightGram()) },
+                        label = { Text(if (metalType == "GOLD") loc(en = "Gross Weight (g)", gu = "ગ્રોસ વજન (ગ્રા)") else AppStrings.weightGram()) },
                         placeholder = { Text("0.000") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f).testTag("dialog_item_gross_wt"),
                         singleLine = true
                     )
+
+                    if (metalType == "GOLD") {
+                        OutlinedTextField(
+                            value = netWeightText,
+                            onValueChange = { netWeightText = it },
+                            label = { Text(loc(en = "Net Weight (g)", gu = "નેટ વજન (ગ્રા)")) },
+                            placeholder = { Text("0.000") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f).testTag("dialog_item_net_wt"),
+                            singleLine = true
+                        )
+                    }
 
                     OutlinedTextField(
                         value = rateText,
@@ -1607,7 +1623,7 @@ fun ItemEditDialog(
 
                 // Making Charge Section: Both % and ₹ supported simultaneously
                 Text(
-                    text = loc(en = "Making Charges (% and/or ₹)", gu = "મજૂરી / ઘડામણ (% અને/અથવા ₹)"),
+                    text = if (metalType == "GOLD") loc(en = "Labour Charge (%)", gu = "લેબર ચાર્જ (%)") else loc(en = "Making Charges (% and/or ₹)", gu = "મજૂરી / ઘડામણ (% અને/અથવા ₹)"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -1625,7 +1641,7 @@ fun ItemEditDialog(
                         singleLine = true
                     )
 
-                    OutlinedTextField(
+                    if (metalType == "SILVER") OutlinedTextField(
                         value = makingRupeesText,
                         onValueChange = { makingRupeesText = it },
                         label = { Text(if (makingRupeeMode == "PER_GRAM") loc(en = "Making (₹/g)", gu = "મજૂરી (₹/ગ્રા)") else loc(en = "Making (₹ Flat)", gu = "મજૂરી (₹ ફિક્સ)")) },
@@ -1638,7 +1654,7 @@ fun ItemEditDialog(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (metalType == "SILVER") Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = makingRupeeMode == "PER_GRAM",
                         onClick = { makingRupeeMode = "PER_GRAM" },
@@ -1662,7 +1678,16 @@ fun ItemEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        if (metalType == "GOLD") {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Gold Amount:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(LanguageManager.formatCurrency(calculatedGoldAmount), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Labour:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${LanguageManager.formatDouble(makingPercentText.toDoubleOrNull() ?: 0.0, 1)}% = ${LanguageManager.formatCurrency(calculatedGoldLabour)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                            }
+                        } else Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(loc(en = "Touch %:", gu = "ટચ %:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("${LanguageManager.formatDouble(effectiveTouch, 1)}%", fontWeight = FontWeight.Medium, fontSize = 12.sp)
                         }
@@ -1705,6 +1730,7 @@ fun ItemEditDialog(
                 onClick = {
                     val wt = weightText.toDoubleOrNull() ?: 0.0
                     val currentTouch = effectiveTouch
+                    val nw = if (metalType == "GOLD") (netWeightText.toDoubleOrNull() ?: 0.0) else wt
                     val makingPct = makingPercentText.toDoubleOrNull() ?: 0.0
                     val rupeeMaking = calculatedRupeeMaking
 
@@ -1747,13 +1773,13 @@ fun ItemEditDialog(
                         metalType = metalType,
                         purity = finalPurity,
                         grossWeight = wt,
-                        netWeight = wt,
+                        netWeight = nw,
                         currentTouch = currentTouch,
                         makingChargePercent = makingPct,
                         totalTouch = totalTouch,
                         totalFine = totalFine,
                         ratePerGram = rate,
-                        makingCharges = rupeeMaking,
+                        makingCharges = if (metalType == "GOLD") calculatedGoldLabour else rupeeMaking,
                         itemTotal = total,
                         stockClassification = stockClassification
                     )
