@@ -1055,7 +1055,7 @@ fun CreateBillScreen(
                                                 )
                                                 if (p.metalWeight > 0) {
                                                     Text(
-                                                        text = p.getFormattedBreakdown(isGu, isSale),
+                                                        text = p.getFormattedBreakdown(isGu, billType == "SALE"),
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = GoldDark
