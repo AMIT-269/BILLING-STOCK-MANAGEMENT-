@@ -100,6 +100,8 @@ abstract class AppDatabase : RoomDatabase() {
                 try { database.execSQL("ALTER TABLE bills ADD COLUMN partyAadharNumber TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
                 try { database.execSQL("ALTER TABLE bills ADD COLUMN partyPanNumber TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
                 try { database.execSQL("ALTER TABLE bills ADD COLUMN partyGstNumber TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
+                try { database.execSQL("ALTER TABLE jeweller_settings ADD COLUMN goldHsnCode TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
+                try { database.execSQL("ALTER TABLE jeweller_settings ADD COLUMN silverHsnCode TEXT NOT NULL DEFAULT ''") } catch (_: Exception) {}
             }
         }
 
