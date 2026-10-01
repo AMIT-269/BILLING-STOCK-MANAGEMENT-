@@ -429,7 +429,7 @@ object BluetoothPrinterHelper {
 
         writeLine("--------------------------------")
         write(ESC_BOLD_ON)
-        writeLine(String.format(Locale.US, "%-14s %6s %10s", "Item/Purity", "Wt(g)", "Total(Rs)"))
+        writeLine(String.format(Locale.US, "%-13s|%6s|%11s", "Item/Purity", "Wt(g)", "Total(Rs)"))
         write(ESC_BOLD_OFF)
         writeLine("--------------------------------")
 
@@ -439,7 +439,7 @@ object BluetoothPrinterHelper {
             val namePurity = "${item.description}$purityTag".take(14)
             val wt = String.format(Locale.US, "%.3f", if (item.netWeight > 0) item.netWeight else item.grossWeight)
             val total = String.format(Locale.US, "%.2f", item.itemTotal)
-            writeLine(String.format(Locale.US, "%-14s %6s %10s", namePurity, wt, total))
+            writeLine(String.format(Locale.US, "%-13s|%6s|%11s", namePurity, wt, total))
         }
 
         writeLine("--------------------------------")
