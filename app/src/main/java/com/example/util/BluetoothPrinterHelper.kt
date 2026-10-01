@@ -431,6 +431,31 @@ object BluetoothPrinterHelper {
         if (bill.partyMobile.isNotBlank()) {
             writeLine("Mobile  : ${bill.partyMobile}")
         }
+        if (bill.partyAddress.isNotBlank()) {
+            writeLine("Address : ${bill.partyAddress}")
+        }
+        if (bill.partyAadharNumber.isNotBlank()) {
+            writeLine("Aadhaar : ${bill.partyAadharNumber}")
+        }
+        if (bill.partyPanNumber.isNotBlank()) {
+            writeLine("PAN     : ${bill.partyPanNumber}")
+        }
+        if (bill.partyGstNumber.isNotBlank()) {
+            writeLine("GST No. : ${bill.partyGstNumber}")
+        }
+
+        // HSN codes configured in Settings, only for Customer Sale bills.
+        if (bill.billType == "SALE") {
+            val saleItems = bill.parseItems()
+            val hasGold = saleItems.any { it.metalType.equals("GOLD", ignoreCase = true) }
+            val hasSilver = saleItems.any { it.metalType.equals("SILVER", ignoreCase = true) }
+            if (hasGold && !settings?.goldHsnCode.isNullOrBlank()) {
+                writeLine("Gold HSN : ${settings!!.goldHsnCode}")
+            }
+            if (hasSilver && !settings?.silverHsnCode.isNullOrBlank()) {
+                writeLine("Silver HSN: ${settings!!.silverHsnCode}")
+            }
+        }
 
         writeLine("--------------------------------")
         write(ESC_BOLD_ON)
