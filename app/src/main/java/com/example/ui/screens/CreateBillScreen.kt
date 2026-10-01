@@ -1548,15 +1548,17 @@ fun ItemEditDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = currentTouchText,
-                    onValueChange = { currentTouchText = it },
-                    label = { Text("${AppStrings.currentTouch()} (%)") },
-                    placeholder = { Text(if (metalType == "GOLD") "e.g. 83.3 or 91.6" else "e.g. 65.0 or 92.5") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth().testTag("dialog_item_touch"),
-                    singleLine = true
-                )
+                if (metalType == "SILVER") {
+                    OutlinedTextField(
+                        value = currentTouchText,
+                        onValueChange = { currentTouchText = it },
+                        label = { Text("${AppStrings.currentTouch()} (%)") },
+                        placeholder = { Text("e.g. 65.0 or 92.5") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth().testTag("dialog_item_touch"),
+                        singleLine = true
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
