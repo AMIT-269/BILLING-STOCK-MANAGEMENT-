@@ -486,7 +486,7 @@ class ExampleRobolectricTest {
     assertTrue("Bill text should mention Gold Received", billText.contains("Gold Received"))
     assertTrue("Bill text should show 10.000g", billText.contains("10.000g"))
     assertTrue("Bill text should show 75%", billText.contains("75%"))
-    assertTrue("Bill text should show Fine 7.500g", billText.contains("7.500g FINE") || billText.contains("Fine 7.500g", ignoreCase = true))
+    assertFalse("Customer sale bill text must NOT show Fine 7.500g", billText.contains("7.500g FINE") || billText.contains("Fine 7.500g", ignoreCase = true))
     assertTrue("Bill text should show 112,500", billText.contains("112,500") || billText.contains("1,12,500"))
     assertTrue("Bill text should mention Cash Received", billText.contains("Cash Received"))
     assertTrue("Bill text should show 37,500", billText.contains("37,500"))
