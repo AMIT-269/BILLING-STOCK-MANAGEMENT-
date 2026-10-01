@@ -211,7 +211,7 @@ object BluetoothPrinterHelper {
                         offset += sent
                     }
 
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
                         onResult(true, "USB print successful")
                     }
                 } catch (e: Exception) {
