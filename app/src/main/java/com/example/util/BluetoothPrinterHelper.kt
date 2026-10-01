@@ -470,7 +470,9 @@ object BluetoothPrinterHelper {
             if (karigarGold) {
                 val metalPurity = if (item.purity.isNotBlank()) "Gold / ${item.purity}" else "Gold"
                 writeLine(String.format(Locale.US, "%d | %s | %s", items.indexOf(item) + 1, item.description.take(14), metalPurity.take(18)))
-                writeLine(String.format(Locale.US, "  Labour: %.1f%% | Gross: %.3fg | Net: %.3fg", item.makingChargePercent, item.grossWeight, item.netWeight))
+                val baseFineAmount = (item.netWeight * item.currentTouch / 100.0) * item.ratePerGram
+                val labourAmount = (item.itemTotal - baseFineAmount).coerceAtLeast(0.0)
+                writeLine(String.format(Locale.US, "  Labour: Rs. %.2f | Gross: %.3fg | Net: %.3fg", labourAmount, item.grossWeight, item.netWeight))
                 writeLine(String.format(Locale.US, "  Fine Gold: %.3fg | Gold Rate: Rs. %.0f/g", item.totalFine, item.ratePerGram))
                 writeLine(String.format(Locale.US, "  Amount: Rs. %.2f", item.itemTotal))
             } else if (goldOnly) {
@@ -479,7 +481,7 @@ object BluetoothPrinterHelper {
                 val labour = if (item.makingCharges > 0) item.makingCharges else goldAmount * item.makingChargePercent / 100.0
                 writeLine(String.format(Locale.US, "%d | %s | %s", items.indexOf(item) + 1, item.description.take(14), metalPurity.take(18)))
                 writeLine(String.format(Locale.US, "  Gross: %.3fg | Net: %.3fg | Rate: Rs. %.0f/g", item.grossWeight, item.netWeight, item.ratePerGram))
-                writeLine(String.format(Locale.US, "  Gold Amount: Rs. %.2f | Labour: %.1f%% = Rs. %.2f", goldAmount, item.makingChargePercent, labour))
+                writeLine(String.format(Locale.US, "  Gold Amount: Rs. %.2f | Labour: Rs. %.2f", goldAmount, labour))
                 writeLine(String.format(Locale.US, "  Total Amount: Rs. %.2f", item.itemTotal))
             } else {
                 val purityTag = if (item.purity.isNotBlank()) " ${item.purity}" else ""
