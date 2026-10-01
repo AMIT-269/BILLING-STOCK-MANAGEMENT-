@@ -824,8 +824,7 @@ fun CreateBillScreen(
                                 val isSale = billType == "SALE"
                                 val wt = wtS.toDoubleOrNull() ?: 0.0
                                 val touch = touchS.toDoubleOrNull() ?: 0.0
-                                val making = if (isGold && !isSale) (inlineMetalMakingText.toDoubleOrNull() ?: 0.0) else 0.0
-                                val totalTouch = touch + making
+                                val totalTouch = touch
                                 val rate = rateS.toDoubleOrNull() ?: 0.0
                                 val totalFine = if (wt > 0) wt * totalTouch / 100.0 else 0.0
                                 val ratePerGram = if (isGold) rate else rate / 1000.0
@@ -876,6 +875,9 @@ fun CreateBillScreen(
                                             value = inlineMetalWeightText,
                                             onValueChange = {
                                                 inlineMetalWeightText = it
+                                                val wtAuto = it.toDoubleOrNull() ?: 0.0
+                                                val touchAuto = inlineMetalTouchText.toDoubleOrNull() ?: 0.0
+                                                inlineGoldPaidFineText = if (isGold && wtAuto > 0.0 && touchAuto > 0.0) LanguageManager.formatDouble(wtAuto * touchAuto / 100.0, 3) else ""
                                                 syncInlinePayments(it, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, inlineGoldPaidFineText)
                                             },
                                             label = { Text(loc(en = "$metalName Wt (g)", gu = "$metalName વજન (ગ્રા)")) },
@@ -888,6 +890,9 @@ fun CreateBillScreen(
                                             value = inlineMetalTouchText,
                                             onValueChange = {
                                                 inlineMetalTouchText = it
+                                                val wtAuto = inlineMetalWeightText.toDoubleOrNull() ?: 0.0
+                                                val touchAuto = it.toDoubleOrNull() ?: 0.0
+                                                inlineGoldPaidFineText = if (isGold && wtAuto > 0.0 && touchAuto > 0.0) LanguageManager.formatDouble(wtAuto * touchAuto / 100.0, 3) else ""
                                                 syncInlinePayments(inlineMetalWeightText, it, inlineMetalRateText, inlineRemainingCashText, inlineGoldPaidFineText)
                                             },
                                             label = { Text(loc(en = "Touch %", gu = "ટચ %")) },
@@ -898,18 +903,7 @@ fun CreateBillScreen(
                                         )
                                     }
 
-                                    if (isGold && !isSale) {
-                                        OutlinedTextField(
-                                            value = inlineMetalMakingText,
-                                            onValueChange = { inlineMetalMakingText = it; syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, inlineGoldPaidFineText) },
-                                            label = { Text(loc(en = "Making Charge %", gu = "મેકિંગ ચાર્જ %")) },
-                                            placeholder = { Text("0.0") },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                            modifier = Modifier.fillMaxWidth(), singleLine = true
-                                        )
-                                    }
-
-                                    val rateUnit = if (isGold) "₹/g" else "₹/kg"
+                                     val rateUnit = if (isGold) "₹/g" else "₹/kg"
                                     OutlinedTextField(
                                         value = inlineMetalRateText,
                                         onValueChange = {
@@ -925,8 +919,7 @@ fun CreateBillScreen(
 
                                     val currWt = inlineMetalWeightText.toDoubleOrNull() ?: 0.0
                                     val currTouch = inlineMetalTouchText.toDoubleOrNull() ?: 0.0
-                                    val currMaking = if (isGold && !isSale) (inlineMetalMakingText.toDoubleOrNull() ?: 0.0) else 0.0
-                                    val currTotalTouch = currTouch + currMaking
+                                    val currTotalTouch = currTouch
                                     val currRate = inlineMetalRateText.toDoubleOrNull() ?: 0.0
                                     val currFine = if (currWt > 0) currWt * currTotalTouch / 100.0 else 0.0
                                     val currRatePerGram = if (isGold) currRate else currRate / 1000.0
@@ -1664,7 +1657,7 @@ fun ItemEditDialog(
 
                 // Making Charge Section: Both % and ₹ supported simultaneously
                 Text(
-                    text = if (metalType == "GOLD") loc(en = "Labour Charge (%)", gu = "લેબર ચાર્જ (%)") else loc(en = "Making Charges (% and/or ₹)", gu = "મજૂરી / ઘડામણ (% અને/અથવા ₹)"),
+                    text = if (metalType == "GOLD") loc(en = "Labour Charge", gu = "લેબર ચાર્જ") else loc(en = "Making Charges (% and/or ₹)", gu = "મજૂરી / ઘડામણ (% અને/અથવા ₹)"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -1739,13 +1732,7 @@ fun ItemEditDialog(
                             Text(loc(en = "Touch %:", gu = "ટચ %:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("${LanguageManager.formatDouble(effectiveTouch, 1)}%", fontWeight = FontWeight.Medium, fontSize = 12.sp)
                         }
-                        if ((makingPercentText.toDoubleOrNull() ?: 0.0) > 0.0) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(loc(en = "Making %:", gu = "મજૂરી %:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("+${makingPercentText}%", fontWeight = FontWeight.Medium, fontSize = 12.sp)
-                            }
-                        }
-                        if (calculatedRupeeMaking > 0.0 && metalType == "SILVER") {
+                         if (calculatedRupeeMaking > 0.0 && metalType == "SILVER") {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(loc(en = "Making (₹):", gu = "મજૂરી (₹):"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("+₹${LanguageManager.formatDouble(calculatedRupeeMaking, 0)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
