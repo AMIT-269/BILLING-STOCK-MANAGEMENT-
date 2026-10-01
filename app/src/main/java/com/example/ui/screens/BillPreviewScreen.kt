@@ -1248,7 +1248,8 @@ fun SplitGoldCashDialog(
     val goldTouch = goldTouchText.toDoubleOrNull() ?: 0.0
     val goldRate = goldRateText.toDoubleOrNull() ?: 0.0
     val fineWeight = (goldWeight * goldTouch / 100.0)
-    val goldAmount = fineWeight * goldRate
+    // Customer Sale gold payment value is weight × manual rate. Touch is used only for owner-side fine accounting.
+    val goldAmount = if (billType == "SALE") goldWeight * goldRate else fineWeight * goldRate
 
     val suggestedCash = (grandTotal - goldAmount).coerceAtLeast(0.0)
     var cashText by remember { mutableStateOf(LanguageManager.formatDouble(suggestedCash, 0)) }
