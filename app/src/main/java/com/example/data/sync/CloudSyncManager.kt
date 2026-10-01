@@ -1421,6 +1421,8 @@ class CloudSyncManager private constructor(private val context: Context) {
                         contactNumber = doc.getString("contactNumber") ?: "",
                         goldRate22k = doc.getDouble("goldRate22k") ?: 0.0,
                         silverRate = doc.getDouble("silverRate") ?: 0.0,
+                        goldHsnCode = doc.getString("goldHsnCode") ?: "",
+                        silverHsnCode = doc.getString("silverHsnCode") ?: "",
                         language = doc.getString("language") ?: "en",
                         updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis()
                     )
@@ -1447,6 +1449,8 @@ class CloudSyncManager private constructor(private val context: Context) {
                         contactNumber = obj.optString("contactNumber"),
                         goldRate22k = obj.optDouble("goldRate22k", 0.0),
                         silverRate = obj.optDouble("silverRate", 0.0),
+                        goldHsnCode = obj.optString("goldHsnCode", ""),
+                        silverHsnCode = obj.optString("silverHsnCode", ""),
                         language = obj.optString("language", "en"),
                         updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
                     )
@@ -1483,6 +1487,10 @@ class CloudSyncManager private constructor(private val context: Context) {
                         isGstBill = doc.getBoolean("isGstBill") ?: false,
                         partyName = doc.getString("partyName") ?: "",
                         partyMobile = doc.getString("partyMobile") ?: "",
+                        partyAddress = doc.getString("partyAddress") ?: "",
+                        partyAadharNumber = doc.getString("partyAadharNumber") ?: "",
+                        partyPanNumber = doc.getString("partyPanNumber") ?: "",
+                        partyGstNumber = doc.getString("partyGstNumber") ?: "",
                         dateTimestamp = doc.getLong("dateTimestamp") ?: System.currentTimeMillis(),
                         itemsJson = doc.getString("itemsJson") ?: "[]",
                         subtotal = doc.getDouble("subtotal") ?: 0.0,
