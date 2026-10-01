@@ -265,69 +265,54 @@ fun BillPreviewScreen(
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                shadowElevation = 8.dp
+                tonalElevation = 8.dp,
+                shadowElevation = 10.dp
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    OutlinedButton(
+                    Button(
                         onClick = {
-                            if (bill != null) {
-                                BillShareHelper.shareBillText(context, bill, settings)
+                            bill?.let { selectedBill ->
+                                viewModel.printBillViaUsb(context, selectedBill) { _, _ -> }
                             }
                         },
+                        colors = ButtonDefaults.buttonColors(containerColor = Charcoal),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("share_digital_bill_btn")
+                            .weight(1f)
+                            .height(52.dp)
+                            .testTag("print_usb_bill_btn")
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Usb, contentDescription = null, modifier = Modifier.size(19.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(AppStrings.share(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            loc(en = "USB / OTG Print", gu = "USB / OTG પ્રિન્ટ"),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    Button(
+                        onClick = { handlePrintClick() },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp)
+                            .testTag("print_bill_btn")
                     ) {
-                        Button(
-                            onClick = {
-                                bill?.let { selectedBill ->
-                                    viewModel.printBillViaUsb(context, selectedBill) { _, _ -> }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Charcoal),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .testTag("print_usb_bill_btn")
-                        ) {
-                            Icon(Icons.Default.Usb, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                loc(en = "USB / OTG", gu = "USB / OTG"),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Button(
-                            onClick = { handlePrintClick() },
-                            colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .testTag("print_bill_btn")
-                        ) {
-                            Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(AppStrings.printThermal(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(19.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            loc(en = "Bluetooth Print", gu = "બ્લૂટૂથ પ્રિન્ટ"),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
