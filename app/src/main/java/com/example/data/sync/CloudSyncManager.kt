@@ -1967,6 +1967,8 @@ class CloudSyncManager private constructor(private val context: Context) {
                         "contactNumber" to settings.contactNumber,
                         "goldRate22k" to settings.goldRate22k,
                         "silverRate" to settings.silverRate,
+                        "goldHsnCode" to settings.goldHsnCode,
+                        "silverHsnCode" to settings.silverHsnCode,
                         "language" to settings.language,
                         "updatedAt" to System.currentTimeMillis()
                     )
@@ -1994,6 +1996,8 @@ class CloudSyncManager private constructor(private val context: Context) {
                 put("contactNumber", settings.contactNumber)
                 put("goldRate22k", settings.goldRate22k)
                 put("silverRate", settings.silverRate)
+                put("goldHsnCode", settings.goldHsnCode)
+                put("silverHsnCode", settings.silverHsnCode)
                 put("language", settings.language)
                 put("updatedAt", System.currentTimeMillis())
             }
@@ -2119,6 +2123,8 @@ class CloudSyncManager private constructor(private val context: Context) {
                             contactNumber = snapshot.getString("contactNumber") ?: "",
                             goldRate22k = snapshot.getDouble("goldRate22k") ?: 0.0,
                             silverRate = snapshot.getDouble("silverRate") ?: 0.0,
+                            goldHsnCode = snapshot.getString("goldHsnCode") ?: "",
+                            silverHsnCode = snapshot.getString("silverHsnCode") ?: "",
                             language = snapshot.getString("language") ?: "en",
                             updatedAt = snapshot.getLong("updatedAt") ?: System.currentTimeMillis()
                         )
