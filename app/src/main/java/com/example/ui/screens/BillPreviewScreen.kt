@@ -489,6 +489,27 @@ fun BillPreviewScreen(
                                                 color = Color(0xFF64748B)
                                             )
                                         }
+                                        if (bill.partyAadharNumber.isNotBlank()) {
+                                            Text(
+                                                text = "Aadhaar: ${bill.partyAadharNumber}",
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF64748B)
+                                            )
+                                        }
+                                        if (bill.partyPanNumber.isNotBlank()) {
+                                            Text(
+                                                text = "PAN: ${bill.partyPanNumber}",
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF64748B)
+                                            )
+                                        }
+                                        if (bill.partyGstNumber.isNotBlank()) {
+                                            Text(
+                                                text = "GST No.: ${bill.partyGstNumber}",
+                                                fontSize = 10.sp,
+                                                color = Color(0xFF64748B)
+                                            )
+                                        }
                                     }
                                 }
 
@@ -535,6 +556,25 @@ fun BillPreviewScreen(
                                             fontSize = 11.sp,
                                             color = Color(0xFF64748B)
                                         )
+                                        if (bill.billType == "SALE") {
+                                            val previewItems = bill.parseItems()
+                                            val hasGold = previewItems.any { it.metalType.equals("GOLD", ignoreCase = true) }
+                                            val hasSilver = previewItems.any { it.metalType.equals("SILVER", ignoreCase = true) }
+                                            if (hasGold && !settings?.goldHsnCode.isNullOrBlank()) {
+                                                Text(
+                                                    text = "Gold HSN: ${settings!!.goldHsnCode}",
+                                                    fontSize = 10.sp,
+                                                    color = Color(0xFF64748B)
+                                                )
+                                            }
+                                            if (hasSilver && !settings?.silverHsnCode.isNullOrBlank()) {
+                                                Text(
+                                                    text = "Silver HSN: ${settings!!.silverHsnCode}",
+                                                    fontSize = 10.sp,
+                                                    color = Color(0xFF64748B)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
