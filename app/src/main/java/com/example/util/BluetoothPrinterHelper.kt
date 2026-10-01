@@ -171,7 +171,7 @@ object BluetoothPrinterHelper {
         }
 
         val device = usbManager.deviceList.values
-            .firstOrNull { usbDevice -> usbDevice.interfaces.any { it.interfaceClass == UsbConstants.USB_CLASS_PRINTER } }
+            .firstOrNull { usbDevice -> (0 until usbDevice.interfaceCount).any { usbDevice.getInterface(it).interfaceClass == UsbConstants.USB_CLASS_PRINTER } }
             ?: usbManager.deviceList.values.firstOrNull()
 
         if (device == null) {
