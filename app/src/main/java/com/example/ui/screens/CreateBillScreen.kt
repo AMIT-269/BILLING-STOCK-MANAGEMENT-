@@ -828,7 +828,7 @@ fun CreateBillScreen(
                                 val rate = rateS.toDoubleOrNull() ?: 0.0
                                 val totalFine = if (wt > 0) wt * totalTouch / 100.0 else 0.0
                                 val ratePerGram = if (isGold) rate else rate / 1000.0
-                                val paidFine = if (isSplit && isGold && !isSale) paidFineS.toDoubleOrNull()?.coerceIn(0.0, totalFine) ?: 0.0 else totalFine
+                                val paidFine = if (isGold && !isSale) paidFineS.toDoubleOrNull()?.coerceIn(0.0, totalFine) ?: totalFine else totalFine
                                 val metalVal = if (isGold) paidFine * ratePerGram else totalFine * ratePerGram
                                 val metalPayment = BillPayment(
                                     id = payments.find { it.paymentMode == (if (isGold) "GOLD" else "SILVER") }?.id ?: UUID.randomUUID().toString(),
@@ -954,17 +954,18 @@ fun CreateBillScreen(
                                         }
                                     }
 
+                                    if (isGold && !isSale) {
+                                        OutlinedTextField(
+                                            value = inlineGoldPaidFineText,
+                                            onValueChange = { inlineGoldPaidFineText = it; syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, it) },
+                                            label = { Text(loc(en = "Gold Fine Given (g)", gu = "સોનામાં આપેલ ફાઇન (ગ્રા)")) },
+                                            placeholder = { Text("0.000") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            modifier = Modifier.fillMaxWidth(), singleLine = true
+                                        )
+                                    }
+
                                     if (isSplit) {
-                                        if (isGold && !isSale) {
-                                            OutlinedTextField(
-                                                value = inlineGoldPaidFineText,
-                                                onValueChange = { inlineGoldPaidFineText = it; syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, it) },
-                                                label = { Text(loc(en = "Gold Fine Given (g)", gu = "સોનામાં આપેલ ફાઇન (ગ્રા)")) },
-                                                placeholder = { Text("0.000") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                modifier = Modifier.fillMaxWidth(), singleLine = true
-                                            )
-                                        }
                                         Divider(color = Color(0xFFE2E8F0))
 
                                         Text(
