@@ -247,6 +247,34 @@ fun BillHistoryCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (bill.partyAddress.isNotBlank()) {
+                        Text(
+                            text = "Address: ${bill.partyAddress}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (bill.partyAadharNumber.isNotBlank()) {
+                        Text(
+                            text = "Aadhaar: ${bill.partyAadharNumber}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (bill.partyPanNumber.isNotBlank()) {
+                        Text(
+                            text = "PAN: ${bill.partyPanNumber}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (bill.partyGstNumber.isNotBlank()) {
+                        Text(
+                            text = "GST No.: ${bill.partyGstNumber}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
