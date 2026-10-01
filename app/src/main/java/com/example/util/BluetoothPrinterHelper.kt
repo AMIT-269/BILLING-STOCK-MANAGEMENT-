@@ -19,6 +19,8 @@ import android.util.Log
 import com.example.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
@@ -180,16 +182,19 @@ object BluetoothPrinterHelper {
         }
 
         fun sendToDevice() {
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 var connection: UsbDeviceConnection? = null
                 var printerInterface: android.hardware.usb.UsbInterface? = null
                 try {
                     connection = usbManager.openDevice(device)
                         ?: throw IllegalStateException("Unable to open USB printer")
 
-                    printerInterface = device.interfaces.firstOrNull {
-                        it.interfaceClass == UsbConstants.USB_CLASS_PRINTER
-                    } ?: device.interfaces.firstOrNull()
+                    printerInterface = (0 until device.interfaceCount)
+                        .map { device.getInterface(it) }
+                        .firstOrNull { it.interfaceClass == UsbConstants.USB_CLASS_PRINTER }
+                        ?: (0 until device.interfaceCount)
+                            .map { device.getInterface(it) }
+                            .firstOrNull()
                         ?: throw IllegalStateException("USB printer interface not found")
 
                     if (!connection.claimInterface(printerInterface, true)) {
@@ -216,7 +221,7 @@ object BluetoothPrinterHelper {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to print via USB", e)
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
                         onResult(false, e.message ?: "USB printing failed")
                     }
                 } finally {
