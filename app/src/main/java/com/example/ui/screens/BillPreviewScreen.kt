@@ -616,6 +616,8 @@ fun BillPreviewScreen(
                                     .horizontalScroll(hScrollState)
                             ) {
                                 Column(modifier = Modifier.width(820.dp)) {
+                                    val goldOnly = items.isNotEmpty() && items.all { it.metalType.equals("GOLD", ignoreCase = true) }
+
                                     // Header Row
                                     Row(
                                         modifier = Modifier
@@ -627,13 +629,13 @@ fun BillPreviewScreen(
                                         TableCell(AppStrings.colNo(), 35.dp, isHeader = true, align = TextAlign.Center)
                                         TableCell(AppStrings.colItem(), 130.dp, isHeader = true)
                                         TableCell(AppStrings.colMetal(), 70.dp, isHeader = true, align = TextAlign.Center)
-                                        TableCell(AppStrings.colWeight(), 85.dp, isHeader = true, align = TextAlign.End)
-                                        TableCell(AppStrings.colTouch(), 85.dp, isHeader = true, align = TextAlign.End)
-                                        TableCell(AppStrings.colMaking(), 85.dp, isHeader = true, align = TextAlign.End)
-                                        TableCell(AppStrings.colTotalTouch(), 75.dp, isHeader = true, align = TextAlign.End)
-                                        TableCell(AppStrings.colTotalFine(), 85.dp, isHeader = true, align = TextAlign.End)
-                                        TableCell(AppStrings.colPrice(), 90.dp, isHeader = true, align = TextAlign.End)
-                                        TableCell(AppStrings.colAmount(), 95.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Gross Wt" else AppStrings.colWeight(), 85.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Net Wt" else AppStrings.colTouch(), 85.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Rate" else AppStrings.colMaking(), 85.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Gold Amount" else AppStrings.colTotalTouch(), 75.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Labour %" else AppStrings.colTotalFine(), 85.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Labour" else AppStrings.colPrice(), 90.dp, isHeader = true, align = TextAlign.End)
+                                        TableCell(if (goldOnly) "Total Amount" else AppStrings.colAmount(), 95.dp, isHeader = true, align = TextAlign.End)
                                     }
 
                                     Divider(color = Color(0xFF94A3B8), thickness = 1.dp)
@@ -667,12 +669,12 @@ fun BillPreviewScreen(
                                             TableCell("${index + 1}", 35.dp, isBold = true, align = TextAlign.Center)
                                             TableCell(item.description, 130.dp, isBold = true)
                                             TableCell(metalDisplay, 70.dp, isBold = true, align = TextAlign.Center)
-                                            TableCell(wtFormatted, 85.dp, isBold = true, align = TextAlign.End)
-                                            TableCell(touchFormatted, 85.dp, align = TextAlign.End)
-                                            TableCell(makingFormatted, 85.dp, align = TextAlign.End)
-                                            TableCell(totalTouchFormatted, 75.dp, align = TextAlign.End)
-                                            TableCell(totalFineFormatted, 85.dp, isBold = true, align = TextAlign.End)
-                                            TableCell(priceFormatted, 90.dp, align = TextAlign.End)
+                                            TableCell(if (goldOnly) LanguageManager.formatDouble(item.grossWeight, 3) else wtFormatted, 85.dp, isBold = true, align = TextAlign.End)
+                                            TableCell(if (goldOnly) LanguageManager.formatDouble(item.netWeight, 3) else touchFormatted, 85.dp, align = TextAlign.End)
+                                            TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(item.ratePerGram, 0)}" else makingFormatted, 85.dp, align = TextAlign.End)
+                                            TableCell(if (goldOnly) LanguageManager.formatDouble(wt * item.ratePerGram, 2) else totalTouchFormatted, 75.dp, align = TextAlign.End)
+                                            TableCell(if (goldOnly) "${LanguageManager.formatDouble(item.makingChargePercent, 1)}%" else totalFineFormatted, 85.dp, isBold = true, align = TextAlign.End)
+                                            TableCell(if (goldOnly) LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (wt * item.ratePerGram * item.makingChargePercent / 100.0), 2) else priceFormatted, 90.dp, align = TextAlign.End)
                                             TableCell(amountFormatted, 95.dp, isBold = true, align = TextAlign.End)
                                         }
                                         Divider(color = Color(0xFFCBD5E1), thickness = 0.8.dp)
