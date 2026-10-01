@@ -268,12 +268,9 @@ fun BillPreviewScreen(
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
                         onClick = {
@@ -283,7 +280,7 @@ fun BillPreviewScreen(
                         },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .height(48.dp)
                             .testTag("share_digital_bill_btn")
                     ) {
@@ -292,43 +289,46 @@ fun BillPreviewScreen(
                         Text(AppStrings.share(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    Button(
-                        onClick = { handlePrintClick() },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("print_bill_btn")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(AppStrings.printThermal(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        bill?.let { selectedBill ->
-                            viewModel.printBillViaUsb(context, selectedBill) { _, _ -> }
+                        Button(
+                            onClick = {
+                                bill?.let { selectedBill ->
+                                    viewModel.printBillViaUsb(context, selectedBill) { _, _ -> }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Charcoal),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("print_usb_bill_btn")
+                        ) {
+                            Icon(Icons.Default.Usb, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                loc(en = "USB / OTG", gu = "USB / OTG"),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Charcoal),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("print_usb_bill_btn")
-                ) {
-                    Icon(Icons.Default.Usb, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        loc(en = "Print via USB / OTG", gu = "USB / OTG થી પ્રિન્ટ"),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+
+                        Button(
+                            onClick = { handlePrintClick() },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("print_bill_btn")
+                        ) {
+                            Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(AppStrings.printThermal(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         },
@@ -1211,14 +1211,14 @@ fun SplitGoldCashDialog(
     onDismiss: () -> Unit,
     onConfirm: (goldPayment: BillPayment, cashPayment: BillPayment) -> Unit
 ) {
-    var goldWeightText by remember { mutableStateOf("6.000") }
-    var goldTouchText by remember { mutableStateOf("80.0") }
+    var goldWeightText by remember { mutableStateOf("") }
+    var goldTouchText by remember { mutableStateOf("") }
     var goldRateText by remember {
         mutableStateOf(if (defaultGoldRate > 0) LanguageManager.formatDouble(defaultGoldRate, 0) else "")
     }
 
     val goldWeight = goldWeightText.toDoubleOrNull() ?: 0.0
-    val goldTouch = goldTouchText.toDoubleOrNull() ?: 80.0
+    val goldTouch = goldTouchText.toDoubleOrNull() ?: 0.0
     val goldRate = goldRateText.toDoubleOrNull() ?: 0.0
     val fineWeight = (goldWeight * goldTouch / 100.0)
     val goldAmount = fineWeight * goldRate
@@ -1280,7 +1280,7 @@ fun SplitGoldCashDialog(
                         value = goldWeightText,
                         onValueChange = { goldWeightText = it },
                         label = { Text(loc(en = "Gold Wt (g)", gu = "વજન (ગ્રા)")) },
-                        placeholder = { Text("6.000") },
+                        placeholder = { Text("0.000") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true
@@ -1289,7 +1289,7 @@ fun SplitGoldCashDialog(
                         value = goldTouchText,
                         onValueChange = { goldTouchText = it },
                         label = { Text(loc(en = "Touch %", gu = "ટચ %")) },
-                        placeholder = { Text("80.0%") },
+                        placeholder = { Text("Touch %") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f),
                         singleLine = true
