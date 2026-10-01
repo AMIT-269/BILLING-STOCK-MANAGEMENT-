@@ -4,7 +4,16 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbManager
+import android.os.Build
 import android.content.SharedPreferences
 import android.util.Log
 import com.example.data.model.*
@@ -149,6 +158,109 @@ object BluetoothPrinterHelper {
         return printReceiptBytes(device, bytes)
     }
 
+    fun printBillViaUsb(
+        context: Context,
+        bill: Bill,
+        settings: JewellerSettings?,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
+        if (usbManager == null) {
+            onResult(false, "USB printing is not supported on this device")
+            return
+        }
+
+        val device = usbManager.deviceList.values
+            .firstOrNull { usbDevice -> usbDevice.interfaces.any { it.interfaceClass == UsbConstants.USB_CLASS_PRINTER } }
+            ?: usbManager.deviceList.values.firstOrNull()
+
+        if (device == null) {
+            onResult(false, "No USB printer found. Connect the printer with an OTG/data cable.")
+            return
+        }
+
+        fun sendToDevice() {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                var connection: UsbDeviceConnection? = null
+                var printerInterface: android.hardware.usb.UsbInterface? = null
+                try {
+                    connection = usbManager.openDevice(device)
+                        ?: throw IllegalStateException("Unable to open USB printer")
+
+                    printerInterface = device.interfaces.firstOrNull {
+                        it.interfaceClass == UsbConstants.USB_CLASS_PRINTER
+                    } ?: device.interfaces.firstOrNull()
+                        ?: throw IllegalStateException("USB printer interface not found")
+
+                    if (!connection.claimInterface(printerInterface, true)) {
+                        throw IllegalStateException("Unable to claim USB printer")
+                    }
+
+                    val endpoint: UsbEndpoint = (0 until printerInterface.endpointCount)
+                        .asSequence()
+                        .map { printerInterface.getEndpoint(it) }
+                        .firstOrNull { it.direction == UsbConstants.USB_DIR_OUT }
+                        ?: throw IllegalStateException("USB printer output endpoint not found")
+
+                    val bytes = generateEscPosBill(bill, settings)
+                    var offset = 0
+                    while (offset < bytes.size) {
+                        val chunk = minOf(16 * 1024, bytes.size - offset)
+                        val sent = connection.bulkTransfer(endpoint, bytes, offset, chunk, 10000)
+                        if (sent <= 0) throw IllegalStateException("USB printer write failed")
+                        offset += sent
+                    }
+
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(true, "USB print successful")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to print via USB", e)
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, e.message ?: "USB printing failed")
+                    }
+                } finally {
+                    try { if (printerInterface != null) connection?.releaseInterface(printerInterface) } catch (_: Exception) {}
+                    try { connection?.close() } catch (_: Exception) {}
+                }
+            }
+        }
+
+        if (usbManager.hasPermission(device)) {
+            sendToDevice()
+            return
+        }
+
+        val action = "${context.packageName}.USB_PERMISSION"
+        val permissionIntent = PendingIntent.getBroadcast(
+            context,
+            device.deviceId,
+            Intent(action).setPackage(context.packageName),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
+                if (intent.action != action) return
+                try { receiverContext.unregisterReceiver(this) } catch (_: Exception) {}
+                if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                    sendToDevice()
+                } else {
+                    onResult(false, "USB printer permission was denied")
+                }
+            }
+        }
+
+        val filter = IntentFilter(action)
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+        usbManager.requestPermission(device, permissionIntent)
+    }
+
     suspend fun printGoldStatement(
         device: BluetoothDevice,
         data: GoldStatementData,
@@ -258,6 +370,8 @@ object BluetoothPrinterHelper {
         writeLine("")
         write(ESC_FEED_AND_CUT)
     }
+
+    fun generateBillBytes(bill: Bill, settings: JewellerSettings?): ByteArray = generateEscPosBill(bill, settings)
 
     private fun generateEscPosBill(bill: Bill, settings: JewellerSettings?): ByteArray {
         val output = ByteArrayOutputStream()
