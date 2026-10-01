@@ -642,7 +642,7 @@ fun BillPreviewScreen(
                                             TableCell(if (goldOnly) "Net Wt" else AppStrings.colTouch(), 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Rate" else AppStrings.colMaking(), 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Gold Amount" else AppStrings.colTotalTouch(), 75.dp, isHeader = true, align = TextAlign.End)
-                                            TableCell(if (goldOnly) "Labour" else AppStrings.colPrice(), 90.dp, isHeader = true, align = TextAlign.End)
+                                            TableCell(if (goldOnly) "Labour %" else AppStrings.colPrice(), 90.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Total Amount" else AppStrings.colAmount(), 95.dp, isHeader = true, align = TextAlign.End)
                                         }
                                     }
@@ -681,7 +681,7 @@ fun BillPreviewScreen(
                                             if (karigarGold) {
                                                 val baseFineAmount = (item.netWeight * item.currentTouch / 100.0) * item.ratePerGram
                                                 val labourAmount = (item.itemTotal - baseFineAmount).coerceAtLeast(0.0)
-                                                TableCell("₹${LanguageManager.formatDouble(labourAmount, 0)}", 75.dp, align = TextAlign.End)
+                                                TableCell("${LanguageManager.formatDouble(item.makingChargePercent, 1)}%", 75.dp, align = TextAlign.End)
                                                 TableCell(LanguageManager.formatDouble(item.grossWeight, 3), 75.dp, isBold = true, align = TextAlign.End)
                                                 TableCell(LanguageManager.formatDouble(item.netWeight, 3), 75.dp, align = TextAlign.End)
                                                 TableCell("${LanguageManager.formatDouble(item.totalFine, 3)}g", 85.dp, isBold = true, align = TextAlign.End)
@@ -693,7 +693,7 @@ fun BillPreviewScreen(
                                                 TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(item.ratePerGram, 0)}" else makingFormatted, 85.dp, align = TextAlign.End)
                                                 TableCell(if (goldOnly) LanguageManager.formatDouble(wt * item.ratePerGram, 2) else totalTouchFormatted, 75.dp, align = TextAlign.End)
                                                 TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (wt * item.ratePerGram * item.makingChargePercent / 100.0), 2)}" else totalFineFormatted, 85.dp, isBold = true, align = TextAlign.End)
-                                                TableCell(if (goldOnly) LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (wt * item.ratePerGram * item.makingChargePercent / 100.0), 2) else priceFormatted, 90.dp, align = TextAlign.End)
+                                                TableCell(if (goldOnly) "" else priceFormatted, 90.dp, align = TextAlign.End)
                                                 TableCell(amountFormatted, 95.dp, isBold = true, align = TextAlign.End)
                                             }
                                         }
