@@ -1866,13 +1866,13 @@ class JewelleryRepository(private val context: Context) {
                             val formattedFine = LanguageManager.formatDouble(stockQty, 3)
                             val rem = if (bill.billType == "SALE") {
                                 loc(
-                                    "bill no. ${bill.billNumber} - ${formattedPhysical}g ${formattedTouch}% = ${formattedFine}g fine (${bill.partyName})",
-                                    "બિલ નં. ${bill.billNumber} - ${formattedPhysical}g ${formattedTouch}% = ${formattedFine}g ફાઇન જમા (${bill.partyName})"
+                                    "Bill No. ${bill.billNumber} - Gold Received: ${formattedPhysical}g @ ${formattedTouch}% = ${formattedFine}g Fine Received (${bill.partyName})",
+                                    "બિલ નં. ${bill.billNumber} - સોનું મેળવ્યું: ${formattedPhysical}g @ ${formattedTouch}% = ${formattedFine}g ફાઇન જમા (${bill.partyName})"
                                 )
                             } else {
                                 loc(
-                                    "bill no. ${bill.billNumber} - ${formattedPhysical}g ${formattedTouch}% = ${formattedFine}g fine (${bill.partyName})",
-                                    "બિલ નં. ${bill.billNumber} - ${formattedPhysical}g ${formattedTouch}% = ${formattedFine}g ફાઇન ચૂકવ્યું (${bill.partyName})"
+                                    "Bill No. ${bill.billNumber} - Gold Paid: ${formattedPhysical}g @ ${formattedTouch}% = ${formattedFine}g Fine Paid (${bill.partyName})",
+                                    "બિલ નં. ${bill.billNumber} - સોનું ચૂકવ્યું: ${formattedPhysical}g @ ${formattedTouch}% = ${formattedFine}g ફાઇન ચૂકવ્યું (${bill.partyName})"
                                 )
                             }
                             val tx = StockTransaction(
