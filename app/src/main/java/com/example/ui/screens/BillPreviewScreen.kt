@@ -642,7 +642,6 @@ fun BillPreviewScreen(
                                             TableCell(if (goldOnly) "Net Wt" else AppStrings.colTouch(), 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Rate" else AppStrings.colMaking(), 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Gold Amount" else AppStrings.colTotalTouch(), 75.dp, isHeader = true, align = TextAlign.End)
-                                            TableCell(if (goldOnly) "Labour" else AppStrings.colTotalFine(), 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Labour" else AppStrings.colPrice(), 90.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Total Amount" else AppStrings.colAmount(), 95.dp, isHeader = true, align = TextAlign.End)
                                         }
