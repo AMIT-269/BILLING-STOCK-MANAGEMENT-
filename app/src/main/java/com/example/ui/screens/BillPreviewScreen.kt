@@ -693,7 +693,7 @@ fun BillPreviewScreen(
                                                 TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(item.ratePerGram, 0)}" else makingFormatted, 85.dp, align = TextAlign.End)
                                                 TableCell(if (goldOnly) LanguageManager.formatDouble(wt * item.ratePerGram, 2) else totalTouchFormatted, 75.dp, align = TextAlign.End)
                                                 TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (wt * item.ratePerGram * item.makingChargePercent / 100.0), 2)}" else totalFineFormatted, 85.dp, isBold = true, align = TextAlign.End)
-                                                TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (wt * item.ratePerGram * item.makingChargePercent / 100.0), 2)}" else priceFormatted, 90.dp, align = TextAlign.End)
+                                                TableCell(if (goldOnly) "" else priceFormatted, 90.dp, align = TextAlign.End)
                                                 TableCell(amountFormatted, 95.dp, isBold = true, align = TextAlign.End)
                                             }
                                         }
@@ -1185,7 +1185,7 @@ private fun TableCell(
         modifier = Modifier
             .width(width)
             .border(0.6.dp, Color(0xFFCBD5E1))
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 6.dp),
         fontWeight = if (isHeader) FontWeight.ExtraBold else if (isBold) FontWeight.Bold else FontWeight.SemiBold,
         fontSize = if (isHeader) 11.sp else 12.sp,
         color = if (isHeader) Color(0xFF0F172A) else Color(0xFF000000),
