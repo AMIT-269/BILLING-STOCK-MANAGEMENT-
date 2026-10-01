@@ -62,6 +62,8 @@ fun SettingsScreen(
     var address by remember(settings) { mutableStateOf(settings?.address ?: "") }
     var gstNumber by remember(settings) { mutableStateOf(settings?.gstNumber ?: "") }
     var contactNumber by remember(settings) { mutableStateOf(settings?.contactNumber ?: account?.mobileNumber ?: "") }
+    var goldHsnCode by remember(settings) { mutableStateOf(settings?.goldHsnCode ?: "") }
+    var silverHsnCode by remember(settings) { mutableStateOf(settings?.silverHsnCode ?: "") }
     var currentLogoBase64 by remember(account?.accountId) { mutableStateOf(settings?.logoBase64) }
     var selectedLanguage by remember(settings) { mutableStateOf(settings?.language ?: "en") }
 
@@ -87,6 +89,8 @@ fun SettingsScreen(
                         contactNumber = contactNumber,
                         goldRate22k = currentSettings?.goldRate22k ?: 0.0,
                         silverRate = currentSettings?.silverRate ?: 0.0,
+                        goldHsnCode = goldHsnCode,
+                        silverHsnCode = silverHsnCode,
                         language = selectedLanguage,
                         onSuccess = {}
                     )
@@ -353,6 +357,27 @@ fun SettingsScreen(
                 }
             }
 
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = goldHsnCode,
+                        onValueChange = { goldHsnCode = it },
+                        label = { Text("Gold HSN Code") },
+                        modifier = Modifier.fillMaxWidth().testTag("settings_gold_hsn"),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = silverHsnCode,
+                        onValueChange = { silverHsnCode = it },
+                        label = { Text("Silver HSN Code") },
+                        modifier = Modifier.fillMaxWidth().testTag("settings_silver_hsn"),
+                        singleLine = true
+                    )
+
             Spacer(modifier = Modifier.height(14.dp))
 
             // Cloud Data Sync Card
@@ -599,6 +624,8 @@ fun SettingsScreen(
                         contactNumber = contactNumber,
                         goldRate22k = settings?.goldRate22k ?: 0.0,
                         silverRate = settings?.silverRate ?: 0.0,
+                        goldHsnCode = goldHsnCode,
+                        silverHsnCode = silverHsnCode,
                         language = selectedLanguage,
                         onSuccess = onNavigateBack
                     )
