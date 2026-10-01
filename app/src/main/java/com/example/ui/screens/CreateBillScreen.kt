@@ -79,6 +79,8 @@ fun CreateBillScreen(
     var inlineMetalWeightText by remember { mutableStateOf("") }
     var inlineMetalTouchText by remember { mutableStateOf("") }
     var inlineMetalRateText by remember { mutableStateOf("") }
+    var inlineMetalMakingText by remember { mutableStateOf("") }
+    var inlineGoldPaidFineText by remember { mutableStateOf("") }
     var inlineRemainingCashText by remember { mutableStateOf("") }
 
     var showAddItemDialog by remember { mutableStateOf(false) }
@@ -782,12 +784,7 @@ fun CreateBillScreen(
                                 selected = paymentMode == "GOLD",
                                 onClick = {
                                     paymentMode = "GOLD"
-                                    if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "6.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
-                                    if (inlineMetalRateText.isBlank()) {
-                                        val defRate = settings?.goldRate22k ?: 7200.0
-                                        if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
-                                    }
+                                    // Payment fields start blank; no automatic 6g or rate.
                                 },
                                 label = { Text(AppStrings.modeGold(), fontSize = 11.sp) },
                                 modifier = Modifier.weight(1f)
@@ -796,12 +793,7 @@ fun CreateBillScreen(
                                 selected = paymentMode == "SILVER",
                                 onClick = {
                                     paymentMode = "SILVER"
-                                    if (inlineMetalWeightText.isBlank()) inlineMetalWeightText = "100.000"
-                                    if (inlineMetalTouchText.isBlank()) inlineMetalTouchText = ""
-                                    if (inlineMetalRateText.isBlank()) {
-                                        val defRate = 0.0
-                                        if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
-                                    }
+                                    // Payment fields start blank; no automatic weight or rate.
                                 },
                                 label = { Text(AppStrings.modeSilver(), fontSize = 11.sp) },
                                 modifier = Modifier.weight(1f)
@@ -827,47 +819,38 @@ fun CreateBillScreen(
                             val metalName = if (isGold) loc(en = "Gold", gu = "સોનું") else loc(en = "Silver", gu = "ચાંદી")
                             val defaultRate = if (isGold) (settings?.goldRate22k ?: 7200.0) else 0.0
 
-                            val syncInlinePayments: (String, String, String, String) -> Unit = { wtS, touchS, rateS, cashS ->
+                            val syncInlinePayments: (String, String, String, String, String) -> Unit = { wtS, touchS, rateS, cashS, paidFineS ->
+                                val isSale = billType == "SALE"
                                 val wt = wtS.toDoubleOrNull() ?: 0.0
                                 val touch = touchS.toDoubleOrNull() ?: 0.0
-                                val rate = rateS.toDoubleOrNull() ?: defaultRate
-                                val fine = if (wt > 0) wt * touch / 100.0 else 0.0
-                                // Silver payment rate is ₹/kg; convert to ₹/g exactly once.
-                                // Gold payment rate remains ₹/g.
+                                val making = if (isGold && !isSale) (inlineMetalMakingText.toDoubleOrNull() ?: 0.0) else 0.0
+                                val totalTouch = touch + making
+                                val rate = rateS.toDoubleOrNull() ?: 0.0
+                                val totalFine = if (wt > 0) wt * totalTouch / 100.0 else 0.0
                                 val ratePerGram = if (isGold) rate else rate / 1000.0
-                                val metalVal = fine * ratePerGram
-
-                                val isSale = billType == "SALE"
+                                val paidFine = if (isSplit && isGold && !isSale) paidFineS.toDoubleOrNull()?.coerceIn(0.0, totalFine) ?: 0.0 else totalFine
+                                val metalVal = if (isGold) paidFine * ratePerGram else totalFine * ratePerGram
                                 val metalPayment = BillPayment(
                                     id = payments.find { it.paymentMode == (if (isGold) "GOLD" else "SILVER") }?.id ?: UUID.randomUUID().toString(),
-                                    entryNumber = 1,
-                                    dateTimestamp = System.currentTimeMillis(),
-                                    paymentMode = if (isGold) "GOLD" else "SILVER",
-                                    amount = metalVal,
-                                    metalWeight = wt,
-                                    metalTouch = touch,
-                                    metalRate = rate,
-                                    fineWeight = fine,
+                                    entryNumber = 1, dateTimestamp = System.currentTimeMillis(),
+                                    paymentMode = if (isGold) "GOLD" else "SILVER", amount = metalVal,
+                                    metalWeight = if (isGold && isSplit && !isSale) paidFine else wt,
+                                    metalTouch = if (isGold && isSplit && !isSale) 100.0 else totalTouch,
+                                    metalRate = rate, fineWeight = if (isGold) paidFine else totalFine,
                                     note = if (isSale) "$metalName received (મેળવેલ $metalName)" else "$metalName paid (ચૂકવેલ $metalName)"
                                 )
-
                                 if (isSplit) {
-                                    val cashVal = cashS.toDoubleOrNull() ?: (grandTotal - metalVal).coerceAtLeast(0.0)
+                                    val autoCash = if (isGold && !isSale) ((totalFine - paidFine).coerceAtLeast(0.0) * ratePerGram) else (grandTotal - metalVal).coerceAtLeast(0.0)
+                                    val cashVal = cashS.toDoubleOrNull() ?: autoCash
                                     val cashPayment = BillPayment(
                                         id = payments.find { it.paymentMode == "CASH" }?.id ?: UUID.randomUUID().toString(),
-                                        entryNumber = 2,
-                                        dateTimestamp = System.currentTimeMillis(),
-                                        paymentMode = "CASH",
-                                        amount = cashVal,
-                                        note = if (isSale) "Cash received (રોકડ મેળવી)" else "Cash paid (રોકડ ચૂકવી)"
+                                        entryNumber = 2, dateTimestamp = System.currentTimeMillis(), paymentMode = "CASH",
+                                        amount = cashVal, note = if (isSale) "Cash received (રોકડ મેળવી)" else "Cash paid (રોકડ ચૂકવી)"
                                     )
-                                    payments.clear()
-                                    payments.add(metalPayment)
-                                    payments.add(cashPayment)
+                                    payments.clear(); payments.add(metalPayment); payments.add(cashPayment)
                                     cashReceivedOrPaidText = LanguageManager.formatDouble(metalVal + cashVal, 0)
                                 } else {
-                                    payments.clear()
-                                    payments.add(metalPayment)
+                                    payments.clear(); payments.add(metalPayment)
                                     cashReceivedOrPaidText = LanguageManager.formatDouble(metalVal, 0)
                                 }
                             }
@@ -892,7 +875,7 @@ fun CreateBillScreen(
                                             value = inlineMetalWeightText,
                                             onValueChange = {
                                                 inlineMetalWeightText = it
-                                                syncInlinePayments(it, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText)
+                                                syncInlinePayments(it, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, inlineGoldPaidFineText)
                                             },
                                             label = { Text(loc(en = "$metalName Wt (g)", gu = "$metalName વજન (ગ્રા)")) },
                                             placeholder = { Text("0.000") },
@@ -904,7 +887,7 @@ fun CreateBillScreen(
                                             value = inlineMetalTouchText,
                                             onValueChange = {
                                                 inlineMetalTouchText = it
-                                                syncInlinePayments(inlineMetalWeightText, it, inlineMetalRateText, inlineRemainingCashText)
+                                                syncInlinePayments(inlineMetalWeightText, it, inlineMetalRateText, inlineRemainingCashText, inlineGoldPaidFineText)
                                             },
                                             label = { Text(loc(en = "Touch %", gu = "ટચ %")) },
                                             placeholder = { Text("80.0%") },
@@ -914,12 +897,23 @@ fun CreateBillScreen(
                                         )
                                     }
 
+                                    if (isGold && !isSale) {
+                                        OutlinedTextField(
+                                            value = inlineMetalMakingText,
+                                            onValueChange = { inlineMetalMakingText = it; syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, inlineGoldPaidFineText) },
+                                            label = { Text(loc(en = "Making Charge %", gu = "મેકિંગ ચાર્જ %")) },
+                                            placeholder = { Text("0.0") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            modifier = Modifier.fillMaxWidth(), singleLine = true
+                                        )
+                                    }
+
                                     val rateUnit = if (isGold) "₹/g" else "₹/kg"
                                     OutlinedTextField(
                                         value = inlineMetalRateText,
                                         onValueChange = {
                                             inlineMetalRateText = it
-                                            syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, it, inlineRemainingCashText)
+                                            syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, it, inlineRemainingCashText, inlineGoldPaidFineText)
                                         },
                                         label = { Text(loc(en = "$metalName Rate ($rateUnit)", gu = "$metalName ભાવ ($rateUnit)")) },
                                         placeholder = { Text(LanguageManager.formatDouble(defaultRate, 0)) },
@@ -930,11 +924,13 @@ fun CreateBillScreen(
 
                                     val currWt = inlineMetalWeightText.toDoubleOrNull() ?: 0.0
                                     val currTouch = inlineMetalTouchText.toDoubleOrNull() ?: 0.0
-                                    val currRate = inlineMetalRateText.toDoubleOrNull() ?: defaultRate
-                                    val currFine = if (currWt > 0) currWt * currTouch / 100.0 else 0.0
-                                    // Silver payment rate is entered in ₹/kg; convert to ₹/g for amount display.
+                                    val currMaking = if (isGold && !isSale) (inlineMetalMakingText.toDoubleOrNull() ?: 0.0) else 0.0
+                                    val currTotalTouch = currTouch + currMaking
+                                    val currRate = inlineMetalRateText.toDoubleOrNull() ?: 0.0
+                                    val currFine = if (currWt > 0) currWt * currTotalTouch / 100.0 else 0.0
                                     val currRatePerGram = if (isGold) currRate else currRate / 1000.0
-                                    val currVal = currFine * currRatePerGram
+                                    val enteredPaidFine = if (isGold && isSplit && !isSale) inlineGoldPaidFineText.toDoubleOrNull()?.coerceIn(0.0, currFine) ?: 0.0 else currFine
+                                    val currVal = if (isGold) enteredPaidFine * currRatePerGram else currFine * currRatePerGram
 
                                     Surface(
                                         color = if (isGold) GoldLight.copy(alpha = 0.25f) else Color(0xFFE2E8F0),
@@ -947,7 +943,11 @@ fun CreateBillScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "${loc(en = "Fine:", gu = "ફાઇન:")} ${LanguageManager.formatDouble(currFine, 3)}g",
+                                                text = if (isGold && isSplit && !isSale) {
+                                                    "${loc(en = "Total Fine:", gu = "કુલ ફાઇન:")} ${LanguageManager.formatDouble(currFine, 3)}g"
+                                                } else {
+                                                    "${loc(en = "Fine:", gu = "ફાઇન:")} ${LanguageManager.formatDouble(currFine, 3)}g (${LanguageManager.formatDouble(currTotalTouch, 1)}%)"
+                                                },
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
@@ -961,6 +961,16 @@ fun CreateBillScreen(
                                     }
 
                                     if (isSplit) {
+                                        if (isGold && !isSale) {
+                                            OutlinedTextField(
+                                                value = inlineGoldPaidFineText,
+                                                onValueChange = { inlineGoldPaidFineText = it; syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, inlineRemainingCashText, it) },
+                                                label = { Text(loc(en = "Gold Fine Given (g)", gu = "સોનામાં આપેલ ફાઇન (ગ્રા)")) },
+                                                placeholder = { Text("0.000") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                modifier = Modifier.fillMaxWidth(), singleLine = true
+                                            )
+                                        }
                                         Divider(color = Color(0xFFE2E8F0))
 
                                         Text(
@@ -974,10 +984,18 @@ fun CreateBillScreen(
                                             value = inlineRemainingCashText,
                                             onValueChange = {
                                                 inlineRemainingCashText = it
-                                                syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, it)
+                                                syncInlinePayments(inlineMetalWeightText, inlineMetalTouchText, inlineMetalRateText, it, inlineGoldPaidFineText)
                                             },
                                             label = { Text(loc(en = "Cash Amount (₹)", gu = "રોકડ રકમ (₹)")) },
-                                            placeholder = { Text(LanguageManager.formatDouble((grandTotal - currVal).coerceAtLeast(0.0), 0)) },
+                                            placeholder = { Text(
+                                                LanguageManager.formatDouble(
+                                                    if (isGold && !isSale) {
+                                                        val paidFine = inlineGoldPaidFineText.toDoubleOrNull() ?: 0.0
+                                                        ((currFine - paidFine).coerceAtLeast(0.0) * currRatePerGram)
+                                                    } else (grandTotal - currVal).coerceAtLeast(0.0),
+                                                    0
+                                                )
+                                            ) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                             modifier = Modifier.fillMaxWidth(),
                                             singleLine = true
