@@ -1523,38 +1523,48 @@ class CloudSyncManager private constructor(private val context: Context) {
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
                 val id = obj.optString("id")
-                if (restoredBills.none { it.id == id }) {
-                    restoredBills.add(
-                        Bill(
-                            id = id,
-                            accountId = accountId,
-                            billNumber = obj.optString("billNumber"),
-                            billType = obj.optString("billType", "SALE"),
-                            isGstBill = obj.optBoolean("isGstBill", false),
-                            partyName = obj.optString("partyName"),
-                            partyMobile = obj.optString("partyMobile"),
-                            partyAddress = obj.optString("partyAddress"),
-                            partyAadharNumber = obj.optString("partyAadharNumber"),
-                            partyPanNumber = obj.optString("partyPanNumber"),
-                            partyGstNumber = obj.optString("partyGstNumber"),
-                            dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
-                            itemsJson = obj.optString("itemsJson", "[]"),
-                            subtotal = obj.optDouble("subtotal", 0.0),
-                            gstPercent = obj.optDouble("gstPercent", 3.0),
-                            gstAmount = obj.optDouble("gstAmount", 0.0),
-                            discount = obj.optDouble("discount", 0.0),
-                            grandTotal = obj.optDouble("grandTotal", 0.0),
-                            cashReceivedOrPaid = obj.optDouble("cashReceivedOrPaid", 0.0),
-                            oldMetalExchangeAmount = obj.optDouble("oldMetalExchangeAmount", 0.0),
-                            otherCharges = obj.optDouble("otherCharges", 0.0),
-                            otherChargesRemark = obj.optString("otherChargesRemark", ""),
-                            netBalanceDue = obj.optDouble("netBalanceDue", 0.0),
-                            notes = obj.optString("notes"),
-                            paymentsJson = obj.optString("paymentsJson", "[]"),
-                            createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                            updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                val fallbackBill = Bill(
+                    id = id,
+                    accountId = accountId,
+                    billNumber = obj.optString("billNumber"),
+                    billType = obj.optString("billType", "SALE"),
+                    isGstBill = obj.optBoolean("isGstBill", false),
+                    partyName = obj.optString("partyName"),
+                    partyMobile = obj.optString("partyMobile"),
+                    partyAddress = obj.optString("partyAddress"),
+                    partyAadharNumber = obj.optString("partyAadharNumber"),
+                    partyPanNumber = obj.optString("partyPanNumber"),
+                    partyGstNumber = obj.optString("partyGstNumber"),
+                    dateTimestamp = obj.optLong("dateTimestamp", System.currentTimeMillis()),
+                    itemsJson = obj.optString("itemsJson", "[]"),
+                    subtotal = obj.optDouble("subtotal", 0.0),
+                    gstPercent = obj.optDouble("gstPercent", 3.0),
+                    gstAmount = obj.optDouble("gstAmount", 0.0),
+                    discount = obj.optDouble("discount", 0.0),
+                    grandTotal = obj.optDouble("grandTotal", 0.0),
+                    cashReceivedOrPaid = obj.optDouble("cashReceivedOrPaid", 0.0),
+                    oldMetalExchangeAmount = obj.optDouble("oldMetalExchangeAmount", 0.0),
+                    otherCharges = obj.optDouble("otherCharges", 0.0),
+                    otherChargesRemark = obj.optString("otherChargesRemark", ""),
+                    netBalanceDue = obj.optDouble("netBalanceDue", 0.0),
+                    notes = obj.optString("notes"),
+                    paymentsJson = obj.optString("paymentsJson", "[]"),
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                )
+                val existingIndex = restoredBills.indexOfFirst { it.id == id }
+                if (existingIndex < 0) {
+                    restoredBills.add(fallbackBill)
+                } else {
+                    // If an older Firestore copy has no Other Charges but the persistent
+                    // fallback copy does, keep the charge details instead of losing them.
+                    val firestoreBill = restoredBills[existingIndex]
+                    if (firestoreBill.otherChargesRemark.isBlank() && fallbackBill.otherChargesRemark.isNotBlank()) {
+                        restoredBills[existingIndex] = firestoreBill.copy(
+                            otherCharges = if (firestoreBill.otherCharges > 0) firestoreBill.otherCharges else fallbackBill.otherCharges,
+                            otherChargesRemark = fallbackBill.otherChargesRemark
                         )
-                    )
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -1562,7 +1572,20 @@ class CloudSyncManager private constructor(private val context: Context) {
         }
 
         if (restoredBills.isNotEmpty()) {
-            db.billDao().insertBills(restoredBills)
+            // Never let a cloud copy with an older/missing Other Charges field erase
+            // a charge that is already safely stored on this device.
+            val protectedBills = restoredBills.map { remoteBill ->
+                val localBill = try { db.billDao().getBillById(remoteBill.id) } catch (_: Exception) { null }
+                if (remoteBill.otherChargesRemark.isBlank() && localBill?.otherChargesRemark?.isNotBlank() == true) {
+                    remoteBill.copy(
+                        otherCharges = if (remoteBill.otherCharges > 0) remoteBill.otherCharges else localBill.otherCharges,
+                        otherChargesRemark = localBill.otherChargesRemark
+                    )
+                } else {
+                    remoteBill
+                }
+            }
+            db.billDao().insertBills(protectedBills)
         }
     }
 
