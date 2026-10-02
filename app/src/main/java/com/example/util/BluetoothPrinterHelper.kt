@@ -521,7 +521,7 @@ object BluetoothPrinterHelper {
             writeLine(String.format(Locale.US, "Old Gold Exch: Rs. -%.2f", bill.oldMetalExchangeAmount))
         }
         if (bill.otherCharges > 0) {
-            writeLine(String.format(Locale.US, "Other Charges: Rs. +%.2f", bill.otherCharges))
+            writeLine(if (bill.otherChargesRemark.isNotBlank()) String.format(Locale.US, "Other Charges (%s): Rs. +%.2f", bill.otherChargesRemark, bill.otherCharges) else String.format(Locale.US, "Other Charges: Rs. +%.2f", bill.otherCharges))
         }
 
         write(ESC_BOLD_ON)
