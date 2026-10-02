@@ -643,7 +643,7 @@ fun BillPreviewScreen(
                                             TableCell("Net Weight", 75.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Rate", 80.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Silver Price", 90.dp, isHeader = true, align = TextAlign.Start)
-                                            TableCell("Labour", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Labour (AUTO)", 90.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Total Amount", 100.dp, isHeader = true, align = TextAlign.Start)
                                         } else {
                                             TableCell(if (goldOnly) "Gross Wt" else AppStrings.colWeight(), 75.dp, isHeader = true, align = TextAlign.End)
