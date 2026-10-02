@@ -520,8 +520,22 @@ object BluetoothPrinterHelper {
         if (bill.oldMetalExchangeAmount > 0) {
             writeLine(String.format(Locale.US, "Old Gold Exch: Rs. -%.2f", bill.oldMetalExchangeAmount))
         }
-        if (bill.otherCharges > 0) {
-            writeLine(if (bill.otherChargesRemark.isNotBlank()) String.format(Locale.US, "Other Charges (%s): Rs. +%.2f", bill.otherChargesRemark, bill.otherCharges) else String.format(Locale.US, "Other Charges: Rs. +%.2f", bill.otherCharges))
+        if (bill.otherCharges > 0 || bill.otherChargesRemark.isNotBlank()) {
+            val otherLines = bill.otherChargesRemark.lines()
+                .mapNotNull { line ->
+                    val parts = line.split("|", limit = 2)
+                    if (parts.size == 2 && parts[0].isNotBlank()) {
+                        parts[0].trim() to (parts[1].trim().toDoubleOrNull() ?: 0.0)
+                    } else null
+                }
+            if (otherLines.isNotEmpty()) {
+                for ((name, amount) in otherLines) {
+                    writeLine(String.format(Locale.US, "Other: %-14s Rs. +%.2f", name.take(14), amount))
+                }
+                writeLine(String.format(Locale.US, "Other Charges Total: Rs. +%.2f", bill.otherCharges))
+            } else {
+                writeLine(if (bill.otherChargesRemark.isNotBlank()) String.format(Locale.US, "Other Charges (%s): Rs. +%.2f", bill.otherChargesRemark, bill.otherCharges) else String.format(Locale.US, "Other Charges: Rs. +%.2f", bill.otherCharges))
+            }
         }
 
         write(ESC_BOLD_ON)
