@@ -1500,6 +1500,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         grandTotal = doc.getDouble("grandTotal") ?: 0.0,
                         cashReceivedOrPaid = doc.getDouble("cashReceivedOrPaid") ?: 0.0,
                         oldMetalExchangeAmount = doc.getDouble("oldMetalExchangeAmount") ?: 0.0,
+                        otherCharges = doc.getDouble("otherCharges") ?: 0.0,
                         netBalanceDue = doc.getDouble("netBalanceDue") ?: 0.0,
                         notes = doc.getString("notes") ?: "",
                         paymentsJson = doc.getString("paymentsJson") ?: "[]",
@@ -1544,6 +1545,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                             grandTotal = obj.optDouble("grandTotal", 0.0),
                             cashReceivedOrPaid = obj.optDouble("cashReceivedOrPaid", 0.0),
                             oldMetalExchangeAmount = obj.optDouble("oldMetalExchangeAmount", 0.0),
+                            otherCharges = obj.optDouble("otherCharges", 0.0),
                             netBalanceDue = obj.optDouble("netBalanceDue", 0.0),
                             notes = obj.optString("notes"),
                             paymentsJson = obj.optString("paymentsJson", "[]"),
@@ -1740,6 +1742,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                 put("grandTotal", bill.grandTotal)
                 put("cashReceivedOrPaid", bill.cashReceivedOrPaid)
                 put("oldMetalExchangeAmount", bill.oldMetalExchangeAmount)
+                put("otherCharges", bill.otherCharges)
                 put("netBalanceDue", bill.netBalanceDue)
                 put("notes", bill.notes)
                 put("paymentsJson", bill.paymentsJson)
