@@ -74,18 +74,22 @@ object BillShareHelper {
             } else {
                 if (isGu) "ચાંદી" else "Silver"
             }
-
-            val puritySuffix = if (item.purity.isNotBlank()) " - ${item.purity}" else ""
-            sb.append("${idx + 1}. *${item.description}* ($metalLabel$puritySuffix)\n")
-            val rateUnit = if (item.metalType == "SILVER") (if (isGu) "કિલો" else "kg") else wtUnit
-            sb.append("   ${if (isGu) "વજન" else "Wt"}: ${LanguageManager.formatDouble(wt, 3)}$wtUnit  |  ${if (isGu) "ભાવ" else "Rate"}: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/$rateUnit\n")
-            if (item.currentTouch > 0 || item.makingChargePercent > 0) {
-                sb.append("   ${if (isGu) "ટચ" else "Touch"}: ${LanguageManager.formatDouble(item.currentTouch, 1)}% + ${LanguageManager.formatDouble(item.makingChargePercent, 1)}% = ${LanguageManager.formatDouble(item.totalTouch, 1)}%  |  ${if (isGu) "શુદ્ધ" else "Fine"}: ${LanguageManager.formatDouble(item.totalFine, 3)}$wtUnit\n")
+            sb.append("${idx + 1}. *${item.description}* ($metalLabel)\n")
+            if (item.metalType == "SILVER") {
+                val silverPrice = item.netWeight * (item.ratePerGram / 1000.0)
+                val labour = silverPrice * item.makingChargePercent / 100.0 + item.makingCharges
+                sb.append("   Gross: ${LanguageManager.formatDouble(item.grossWeight, 3)}g | Net: ${LanguageManager.formatDouble(item.netWeight, 3)}g\n")
+                sb.append("   Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg | Silver Price: ${LanguageManager.formatCurrency(silverPrice)}\n")
+                sb.append("   Labour (AUTO): ${LanguageManager.formatCurrency(labour)} | Total: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
+            } else {
+                val puritySuffix = if (item.purity.isNotBlank()) " - ${item.purity}" else ""
+                sb.append("   Wt: ${LanguageManager.formatDouble(wt, 3)}$wtUnit | Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/${if (isGu) "ગ્રામ" else "g"}$puritySuffix\n")
+                if (item.currentTouch > 0 || item.makingChargePercent > 0) {
+                    sb.append("   Touch: ${LanguageManager.formatDouble(item.currentTouch, 1)}% + ${LanguageManager.formatDouble(item.makingChargePercent, 1)}% = ${LanguageManager.formatDouble(item.totalTouch, 1)}% | Fine: ${LanguageManager.formatDouble(item.totalFine, 3)}$wtUnit\n")
+                }
+                if (item.makingCharges > 0) sb.append("   Making: ${LanguageManager.formatCurrency(item.makingCharges)}\n")
+                sb.append("   Total: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
             }
-            if (item.makingCharges > 0) {
-                sb.append("   ${if (isGu) "મેકિંગ ચાર્જ" else "Making"}: ${LanguageManager.formatCurrency(item.makingCharges)}\n")
-            }
-            sb.append("   ${if (isGu) "કુલ" else "Total"}: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
         }
 
         sb.append("━━━━━━━━━━━━━━━━━━━━\n")
@@ -106,6 +110,9 @@ object BillShareHelper {
 
         if (bill.oldMetalExchangeAmount > 0) {
             sb.append("${if (isGu) "જૂનું સોનું/ચાંદી જમા" else "Old Metal Exchange"}: -${LanguageManager.formatCurrency(bill.oldMetalExchangeAmount)}\n")
+        }
+        if (bill.otherCharges > 0) {
+            sb.append("Other Charges: +${LanguageManager.formatCurrency(bill.otherCharges)}\n")
         }
 
         sb.append("━━━━━━━━━━━━━━━━━━━━\n")
