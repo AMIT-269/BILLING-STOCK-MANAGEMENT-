@@ -700,7 +700,7 @@ fun BillPreviewScreen(
                                                 TableCell(LanguageManager.formatDouble(item.netWeight, 3), 75.dp, align = TextAlign.Start)
                                                 TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg", 80.dp, align = TextAlign.Start)
                                                 TableCell(LanguageManager.formatDouble(item.netWeight * (item.ratePerGram / 1000.0), 2), 90.dp, align = TextAlign.Start)
-                                                TableCell(LanguageManager.formatDouble(item.makingCharges, 2), 90.dp, align = TextAlign.Start)
+                                                TableCell(LanguageManager.formatDouble((item.netWeight * (item.ratePerGram / 1000.0) * item.makingChargePercent / 100.0) + item.makingCharges, 2), 90.dp, align = TextAlign.Start)
                                                 TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                             } else {
                                                 if (goldOnly) {
