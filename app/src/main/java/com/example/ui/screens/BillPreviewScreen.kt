@@ -784,25 +784,37 @@ fun BillPreviewScreen(
                                                 color = Color(0xFFB45309)
                                             )
                                         }
-                                        if (bill.otherCharges > 0 || bill.otherChargesRemark.isNotBlank()) {
-                                            MiniRow(
-                                                title = if (bill.otherChargesRemark.isNotBlank()) "Other Charges (${bill.otherChargesRemark}):" else "Other Charges:",
-                                                value = if (bill.otherCharges > 0) "+ ${LanguageManager.formatCurrency(bill.otherCharges)}" else LanguageManager.formatCurrency(0.0),
-                                                color = GoldDark
-                                            )
+                                                                                if (bill.otherCharges > 0 || bill.otherChargesRemark.isNotBlank()) {
+                                            val otherLines = bill.otherChargesRemark.lines()
+                                                .mapNotNull { line ->
+                                                    val parts = line.split("|", limit = 2)
+                                                    if (parts.size == 2 && parts[0].isNotBlank()) {
+                                                        parts[0].trim() to (parts[1].trim().toDoubleOrNull() ?: 0.0)
+                                                    } else null
+                                                }
+                                            if (otherLines.isNotEmpty()) {
+                                                otherLines.forEach { (name, amount) ->
+                                                    MiniRow(
+                                                        title = "$name:",
+                                                        value = "+ ${LanguageManager.formatCurrency(amount)}",
+                                                        color = GoldDark
+                                                    )
+                                                }
+                                                MiniRow(
+                                                    title = "Other Charges Total:",
+                                                    value = "+ ${LanguageManager.formatCurrency(bill.otherCharges)}",
+                                                    color = GoldDark,
+                                                    isBold = true
+                                                )
+                                            } else {
+                                                MiniRow(
+                                                    title = if (bill.otherChargesRemark.isNotBlank()) "Other Charges (${bill.otherChargesRemark}):" else "Other Charges:",
+                                                    value = "__TOTAL__",
+                                                    color = GoldDark
+                                                )
+                                            }
                                         }
-
-                                        if (bill.otherCharges > 0) {
-                                            MiniRow(
-                                                title = "Other Charges:",
-                                                value = LanguageManager.formatCurrency(bill.otherCharges),
-                                                color = GoldDark
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Totals Card
+                                                                        // Totals Card
                                 Card(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),
