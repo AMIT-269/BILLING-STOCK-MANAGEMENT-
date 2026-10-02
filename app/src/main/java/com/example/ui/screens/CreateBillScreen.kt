@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -72,7 +73,20 @@ fun CreateBillScreen(
 
     var discountText by remember { mutableStateOf("0") }
     var oldMetalExchangeText by remember { mutableStateOf("0") }
-    val otherChargeEntries = remember { mutableStateListOf<OtherChargeEntry>() }
+    var otherChargeEntries by rememberSaveable(
+        stateSaver = listSaver<OtherChargeEntry, Any>(
+            save = { entries -> entries.map { listOf(it.name, it.amount) } },
+            restore = { saved ->
+                saved.map { row ->
+                    val values = row as List<*>
+                    OtherChargeEntry(
+                        name = values.getOrNull(0) as? String ?: "",
+                        amount = values.getOrNull(1) as? String ?: ""
+                    )
+                }
+            }
+        )
+    ) { mutableStateOf(emptyList()) }
     var cashReceivedOrPaidText by remember { mutableStateOf("0") }
 
     val items = remember { mutableStateListOf<BillItem>() }
@@ -122,18 +136,18 @@ fun CreateBillScreen(
                 notes = b.notes
                 discountText = if (b.discount > 0) LanguageManager.formatDouble(b.discount, 0) else "0"
                 oldMetalExchangeText = if (b.oldMetalExchangeAmount > 0) LanguageManager.formatDouble(b.oldMetalExchangeAmount, 0) else "0"
-                otherChargeEntries.clear()
+                otherChargeEntries = emptyList()
                 if (b.otherChargesRemark.isNotBlank()) {
                     b.otherChargesRemark.lines().forEach { line ->
                         val parts = line.split("|", limit = 2)
                         if (parts.size == 2 && parts[0].isNotBlank()) {
-                            otherChargeEntries.add(OtherChargeEntry(parts[0].trim(), parts[1].trim()))
+                            otherChargeEntries = otherChargeEntries + OtherChargeEntry(parts[0].trim(), parts[1].trim())
                         }
                     }
                 }
                 // Backward compatibility for older bills that stored one remark + one total.
                 if (otherChargeEntries.isEmpty() && b.otherCharges > 0) {
-                    otherChargeEntries.add(OtherChargeEntry(b.otherChargesRemark.ifBlank { "Other Charges" }, LanguageManager.formatDouble(b.otherCharges, 0)))
+                    otherChargeEntries = otherChargeEntries + OtherChargeEntry(b.otherChargesRemark.ifBlank { "Other Charges" }, LanguageManager.formatDouble(b.otherCharges, 0))
                 }
                 cashReceivedOrPaidText = if (b.cashReceivedOrPaid > 0) LanguageManager.formatDouble(b.cashReceivedOrPaid, 0) else "0"
                 existingBillCreatedAt = b.createdAt
@@ -743,7 +757,7 @@ fun CreateBillScreen(
                                         )
                                     }
                                     Button(
-                                        onClick = { otherChargeEntries.add(OtherChargeEntry()) },
+                                        onClick = { otherChargeEntries = otherChargeEntries + OtherChargeEntry() },
                                         colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
                                         modifier = Modifier.testTag("add_other_charge_btn")
@@ -770,7 +784,7 @@ fun CreateBillScreen(
                                         FilterChip(
                                             selected = false,
                                             onClick = {
-                                                otherChargeEntries.add(OtherChargeEntry(name = preset))
+                                                otherChargeEntries = otherChargeEntries + OtherChargeEntry(name = preset)
                                             },
                                             label = { Text(preset, fontSize = 9.sp) }
                                         )
@@ -795,7 +809,7 @@ fun CreateBillScreen(
                                                     value = entry.name,
                                                     onValueChange = { value ->
                                                         if (index < otherChargeEntries.size) {
-                                                            otherChargeEntries[index] = otherChargeEntries[index].copy(name = value)
+                                                            otherChargeEntries = otherChargeEntries.toMutableList().also { it[index] = it[index].copy(name = value) }
                                                         }
                                                     },
                                                     label = { Text("Charge Name") },
@@ -807,7 +821,7 @@ fun CreateBillScreen(
                                                     value = entry.amount,
                                                     onValueChange = { value ->
                                                         if (index < otherChargeEntries.size) {
-                                                            otherChargeEntries[index] = otherChargeEntries[index].copy(amount = value)
+                                                            otherChargeEntries = otherChargeEntries.toMutableList().also { it[index] = it[index].copy(amount = value) }
                                                         }
                                                     },
                                                     label = { Text("Amount") },
@@ -818,7 +832,7 @@ fun CreateBillScreen(
                                                 IconButton(
                                                     onClick = {
                                                         if (index < otherChargeEntries.size) {
-                                                            otherChargeEntries.removeAt(index)
+                                                            otherChargeEntries = otherChargeEntries.toMutableList().also { it.removeAt(index) }
                                                         }
                                                     },
                                                     modifier = Modifier.size(40.dp)
