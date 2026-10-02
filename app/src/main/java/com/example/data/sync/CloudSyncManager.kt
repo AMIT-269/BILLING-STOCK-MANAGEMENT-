@@ -1690,6 +1690,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         "grandTotal" to bill.grandTotal,
                         "cashReceivedOrPaid" to bill.cashReceivedOrPaid,
                         "oldMetalExchangeAmount" to bill.oldMetalExchangeAmount,
+                        "otherCharges" to bill.otherCharges,
                         "netBalanceDue" to bill.netBalanceDue,
                         "notes" to bill.notes,
                         "paymentsJson" to bill.paymentsJson,
