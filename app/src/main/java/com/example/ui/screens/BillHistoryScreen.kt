@@ -336,6 +336,34 @@ fun BillHistoryCard(
                 }
             }
 
+            if (bill.otherCharges > 0 || bill.otherChargesRemark.isNotBlank()) {
+                val otherLines = bill.otherChargesRemark.lines().mapNotNull { line ->
+                    val parts = line.split("|", limit = 2)
+                    if (parts.size == 2 && parts[0].isNotBlank()) parts[0].trim() to (parts[1].trim().toDoubleOrNull() ?: 0.0) else null
+                }
+                if (otherLines.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)) {
+                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                            Text(text = "Other Charges", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldDark)
+                            otherLines.forEach { (name, amount) ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(text = name, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(text = "+ " + LanguageManager.formatCurrency(amount), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = GoldDark)
+                                }
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = "Other Charges Total", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(text = "+ " + LanguageManager.formatCurrency(bill.otherCharges), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldDark)
+                            }
+                        }
+                    }
+                } else if (bill.otherCharges > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = "Other Charges: + " + LanguageManager.formatCurrency(bill.otherCharges), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldDark)
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
             Divider()
             Spacer(modifier = Modifier.height(6.dp))
