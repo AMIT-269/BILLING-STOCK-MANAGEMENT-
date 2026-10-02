@@ -497,8 +497,7 @@ fun BillPreviewScreen(
                                             )
                                         }
                                         if (bill.partyPanNumber.isNotBlank()) {
-                                            Text(
-                                                text = "PAN: ${bill.partyPanNumber}",
+                                            Text(                                                text = "PAN: ${bill.partyPanNumber}",
                                                 fontSize = 10.sp,
                                                 color = Color(0xFF64748B)
                                             )
@@ -644,6 +643,7 @@ fun BillPreviewScreen(
                                             TableCell("Rate", 80.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Silver Price", 90.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Labour (AUTO)", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Other Charges", 100.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Total Amount", 100.dp, isHeader = true, align = TextAlign.Start)
                                         } else {
                                             TableCell(if (goldOnly) "Gross Wt" else AppStrings.colWeight(), 75.dp, isHeader = true, align = TextAlign.End)
@@ -701,6 +701,8 @@ fun BillPreviewScreen(
                                                 TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg", 80.dp, align = TextAlign.Start)
                                                 TableCell(LanguageManager.formatDouble(item.netWeight * (item.ratePerGram / 1000.0), 2), 90.dp, align = TextAlign.Start)
                                                 TableCell(LanguageManager.formatDouble((item.netWeight * (item.ratePerGram / 1000.0) * item.makingChargePercent / 100.0) + item.makingCharges, 2), 90.dp, align = TextAlign.Start)
+                                                val rowOtherCharges = if (index == items.lastIndex) bill.otherCharges else 0.0
+                                                TableCell(LanguageManager.formatCurrency(rowOtherCharges), 100.dp, align = TextAlign.Start)
                                                 TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                             } else {
                                                 if (goldOnly) {
@@ -709,6 +711,8 @@ fun BillPreviewScreen(
                                                     TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}", 80.dp, align = TextAlign.End)
                                                     TableCell(LanguageManager.formatDouble(item.netWeight * item.ratePerGram, 2), 90.dp, align = TextAlign.Start)
                                                     TableCell("₹" + LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (item.netWeight * item.ratePerGram * item.makingChargePercent / 100.0), 2), 90.dp, align = TextAlign.Start)
+                                                    val rowOtherCharges = if (index == items.lastIndex) bill.otherCharges else 0.0
+                                                    TableCell(LanguageManager.formatCurrency(rowOtherCharges), 100.dp, align = TextAlign.Start)
                                                     TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                                 } else {
                                                     TableCell(item.description, 75.dp, align = TextAlign.Start)
@@ -997,8 +1001,7 @@ fun BillPreviewScreen(
                                         MiniRow(
                                             title = balanceLabel,
                                             value = LanguageManager.formatCurrency(bill.netBalanceDue),
-                                            color = if (bill.netBalanceDue > 0) DebitRed else CashGreen,
-                                            isBold = true
+                                            color = if (bill.netBalanceDue > 0) DebitRed else CashGreen,                                            isBold = true
                                         )
                                     }
                                 }
@@ -1497,8 +1500,7 @@ fun SplitGoldCashDialog(
                         amount = goldAmount,
                         metalWeight = goldWeight,
                         metalTouch = totalGoldTouch,
-                        metalRate = goldRate,
-                        fineWeight = fineWeight,
+                        metalRate = goldRate,                        fineWeight = fineWeight,
                         note = if (isSale) "Gold received (વેચાણ બિલ સોનું)" else "Gold paid (ખરીદી બિલ સોનું)"
                     )
                     val p2 = BillPayment(
