@@ -618,6 +618,7 @@ fun BillPreviewScreen(
                                 Column(modifier = Modifier.width(820.dp)) {
                                     val goldOnly = items.isNotEmpty() && items.all { it.metalType.equals("GOLD", ignoreCase = true) }
                                     val karigarGold = bill.billType == "KARIGAR_PURCHASE" && goldOnly
+                                    val silverOnly = items.isNotEmpty() && items.all { it.metalType.equals("SILVER", ignoreCase = true) }
 
                                     // Header Row
                                     Row(
@@ -637,6 +638,13 @@ fun BillPreviewScreen(
                                             TableCell("Fine Gold", 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell("Gold Rate", 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell("Amount", 90.dp, isHeader = true, align = TextAlign.End)
+                                        } else if (silverOnly) {
+                                            TableCell("Gross Weight", 75.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Net Weight", 75.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Rate", 80.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Silver Price", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Labour (AUTO)", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Total Amount (AUTO)", 100.dp, isHeader = true, align = TextAlign.Start)
                                         } else {
                                             TableCell(if (goldOnly) "Gross Wt" else AppStrings.colWeight(), 75.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Net Wt" else AppStrings.colTouch(), 75.dp, isHeader = true, align = TextAlign.End)
@@ -652,7 +660,7 @@ fun BillPreviewScreen(
                                     // Item Rows
                                     items.forEachIndexed { index, item ->
                                         val metalName = if (item.metalType == "GOLD") AppStrings.gold() else AppStrings.silver()
-                                        val metalDisplay = if (item.purity.isNotBlank()) "$metalName (${item.purity})" else metalName
+                                        val metalDisplay = if (item.metalType.equals("SILVER", ignoreCase = true)) metalName else if (item.purity.isNotBlank()) "$metalName (${item.purity})" else metalName
                                         val wt = if (item.netWeight > 0) item.netWeight else item.grossWeight
                                         val wtFormatted = LanguageManager.formatDouble(wt, 3)
                                         val touchFormatted = "${LanguageManager.formatDouble(item.currentTouch, 1)}%"
@@ -687,16 +695,25 @@ fun BillPreviewScreen(
                                                 TableCell("${LanguageManager.formatDouble(item.totalFine, 3)}g", 85.dp, isBold = true, align = TextAlign.End)
                                                 TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/g", 85.dp, align = TextAlign.End)
                                                 TableCell(amountFormatted, 90.dp, isBold = true, align = TextAlign.End)
+                                            } else if (silverOnly) {
+                                                TableCell(LanguageManager.formatDouble(item.grossWeight, 3), 75.dp, isBold = true, align = TextAlign.Start)
+                                                TableCell(LanguageManager.formatDouble(item.netWeight, 3), 75.dp, align = TextAlign.Start)
+                                                TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg", 80.dp, align = TextAlign.Start)
+                                                TableCell(LanguageManager.formatDouble(item.netWeight * (item.ratePerGram / 1000.0), 2), 90.dp, align = TextAlign.Start)
+                                                TableCell(LanguageManager.formatDouble(item.makingCharges, 2), 90.dp, align = TextAlign.Start)
+                                                TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                             } else {
-                                                TableCell(if (goldOnly) LanguageManager.formatDouble(item.grossWeight, 3) else wtFormatted, 75.dp, isBold = true, align = TextAlign.End)
-                                                TableCell(if (goldOnly) LanguageManager.formatDouble(item.netWeight, 3) else touchFormatted, 75.dp, align = TextAlign.End)
-                                                TableCell(if (goldOnly) "₹${LanguageManager.formatDouble(item.ratePerGram, 0)}" else makingFormatted, 80.dp, align = TextAlign.End)
                                                 if (goldOnly) {
-                                                    // Customer Sale Gold: Gold Amount -> Labour ₹ -> Total Amount.
-                                                    TableCell(LanguageManager.formatDouble(wt * item.ratePerGram, 2), 90.dp, align = TextAlign.Start)
-                                                    TableCell("₹" + LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (wt * item.ratePerGram * item.makingChargePercent / 100.0), 2), 90.dp, align = TextAlign.Start)
+                                                    TableCell(LanguageManager.formatDouble(item.grossWeight, 3), 75.dp, isBold = true, align = TextAlign.End)
+                                                    TableCell(LanguageManager.formatDouble(item.netWeight, 3), 75.dp, align = TextAlign.End)
+                                                    TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}", 80.dp, align = TextAlign.End)
+                                                    TableCell(LanguageManager.formatDouble(item.netWeight * item.ratePerGram, 2), 90.dp, align = TextAlign.Start)
+                                                    TableCell("₹" + LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (item.netWeight * item.ratePerGram * item.makingChargePercent / 100.0), 2), 90.dp, align = TextAlign.Start)
                                                     TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                                 } else {
+                                                    TableCell(item.description, 75.dp, align = TextAlign.Start)
+                                                    TableCell(wtFormatted, 75.dp, align = TextAlign.End)
+                                                    TableCell(touchFormatted, 80.dp, align = TextAlign.End)
                                                     TableCell(totalTouchFormatted, 90.dp, align = TextAlign.End)
                                                     TableCell(totalFineFormatted, 85.dp, isBold = true, align = TextAlign.End)
                                                     TableCell(priceFormatted, 90.dp, align = TextAlign.End)
@@ -765,6 +782,14 @@ fun BillPreviewScreen(
                                                 title = "${AppStrings.oldMetalExchange()}:",
                                                 value = "- ${LanguageManager.formatCurrency(bill.oldMetalExchangeAmount)}",
                                                 color = Color(0xFFB45309)
+                                            )
+                                        }
+
+                                        if (bill.otherCharges > 0) {
+                                            MiniRow(
+                                                title = "Other Charges:",
+                                                value = LanguageManager.formatCurrency(bill.otherCharges),
+                                                color = GoldDark
                                             )
                                         }
                                     }
