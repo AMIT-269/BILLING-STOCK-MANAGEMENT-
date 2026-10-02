@@ -809,7 +809,7 @@ fun BillPreviewScreen(
                                             } else {
                                                 MiniRow(
                                                     title = if (bill.otherChargesRemark.isNotBlank()) "Other Charges (${bill.otherChargesRemark}):" else "Other Charges:",
-                                                    value = "__TOTAL__",
+                                                    value = "+ ${LanguageManager.formatCurrency(bill.otherCharges)}",
                                                     color = GoldDark
                                                 )
                                             }
@@ -1219,6 +1219,8 @@ fun BillPreviewScreen(
             }
         }
     }
+}
+
 }
 
 @Composable
