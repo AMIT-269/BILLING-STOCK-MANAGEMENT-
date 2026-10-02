@@ -112,7 +112,7 @@ object BillShareHelper {
             sb.append("${if (isGu) "જૂનું સોનું/ચાંદી જમા" else "Old Metal Exchange"}: -${LanguageManager.formatCurrency(bill.oldMetalExchangeAmount)}\n")
         }
         if (bill.otherCharges > 0) {
-            sb.append("Other Charges: +${LanguageManager.formatCurrency(bill.otherCharges)}\n")
+            sb.append("Other Charges" + if (bill.otherChargesRemark.isNotBlank()) " (${bill.otherChargesRemark})" else "" + ": +" + LanguageManager.formatCurrency(bill.otherCharges) + "\n")
         }
 
         sb.append("━━━━━━━━━━━━━━━━━━━━\n")
