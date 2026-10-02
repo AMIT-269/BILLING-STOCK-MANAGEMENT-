@@ -70,6 +70,7 @@ fun CreateBillScreen(
 
     var discountText by remember { mutableStateOf("0") }
     var oldMetalExchangeText by remember { mutableStateOf("0") }
+    var otherChargesText by remember { mutableStateOf("") }
     var cashReceivedOrPaidText by remember { mutableStateOf("0") }
 
     val items = remember { mutableStateListOf<BillItem>() }
@@ -119,6 +120,7 @@ fun CreateBillScreen(
                 notes = b.notes
                 discountText = if (b.discount > 0) LanguageManager.formatDouble(b.discount, 0) else "0"
                 oldMetalExchangeText = if (b.oldMetalExchangeAmount > 0) LanguageManager.formatDouble(b.oldMetalExchangeAmount, 0) else "0"
+                otherChargesText = if (b.otherCharges > 0) LanguageManager.formatDouble(b.otherCharges, 0) else ""
                 cashReceivedOrPaidText = if (b.cashReceivedOrPaid > 0) LanguageManager.formatDouble(b.cashReceivedOrPaid, 0) else "0"
                 existingBillCreatedAt = b.createdAt
                 existingBillDateTimestamp = b.dateTimestamp
@@ -177,7 +179,8 @@ fun CreateBillScreen(
 
     val discount = discountText.toDoubleOrNull() ?: 0.0
     val oldMetal = oldMetalExchangeText.toDoubleOrNull() ?: 0.0
-    val grandTotal = (subtotal + gstAmount + cstAmount - discount - oldMetal).coerceAtLeast(0.0)
+    val otherCharges = otherChargesText.toDoubleOrNull() ?: 0.0
+    val grandTotal = (subtotal + gstAmount + cstAmount + otherCharges - discount - oldMetal).coerceAtLeast(0.0)
 
     val totalPaidFromPayments = payments.sumOf { it.amount }
     val cashReceivedOrPaid = if (payments.isNotEmpty()) totalPaidFromPayments else (cashReceivedOrPaidText.toDoubleOrNull() ?: 0.0)
@@ -716,6 +719,16 @@ fun CreateBillScreen(
                             )
                         }
 
+                        OutlinedTextField(
+                            value = otherChargesText,
+                            onValueChange = { otherChargesText = it },
+                            label = { Text("Other Charges") },
+                            placeholder = { Text("Rhodium / HUID / AD / Moti etc.") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth().testTag("bill_other_charges_input"),
+                            singleLine = true
+                        )
+
                         Divider(modifier = Modifier.padding(vertical = 10.dp))
 
                         // Grand Total
@@ -1228,6 +1241,7 @@ fun CreateBillScreen(
                             grandTotal = grandTotal,
                             cashReceivedOrPaid = cashReceivedOrPaid,
                             oldMetalExchangeAmount = oldMetal,
+                            otherCharges = otherCharges,
                             netBalanceDue = netBalanceDue,
                             notes = notes.trim(),
                             createdAt = if (isEditMode) existingBillCreatedAt else System.currentTimeMillis(),
@@ -1390,7 +1404,7 @@ fun ItemEditDialog(
     val calculatedTotalTouch by remember {
         derivedStateOf {
             val makingPct = makingPercentText.toDoubleOrNull() ?: 0.0
-            effectiveTouch + makingPct
+            if (metalType == "SILVER") effectiveTouch else effectiveTouch + makingPct
         }
     }
 
@@ -1407,13 +1421,29 @@ fun ItemEditDialog(
 
     val calculatedRupeeMaking by remember {
         derivedStateOf {
-            val wt = weightText.toDoubleOrNull() ?: 0.0
+            val wt = if (metalType == "SILVER") (netWeightText.toDoubleOrNull() ?: 0.0) else (weightText.toDoubleOrNull() ?: 0.0)
             val rupeeVal = makingRupeesText.toDoubleOrNull() ?: 0.0
-            if (makingRupeeMode == "PER_GRAM") {
-                rupeeVal * wt
-            } else {
-                rupeeVal
-            }
+            if (makingRupeeMode == "PER_GRAM") rupeeVal * wt else rupeeVal
+        }
+    }
+
+    val calculatedSilverPrice by remember {
+        derivedStateOf {
+            val netWt = netWeightText.toDoubleOrNull() ?: 0.0
+            val ratePerKg = rateText.toDoubleOrNull() ?: 0.0
+            netWt * (ratePerKg / 1000.0)
+        }
+    }
+
+    val calculatedSilverPercentMaking by remember {
+        derivedStateOf {
+            calculatedSilverPrice * (makingPercentText.toDoubleOrNull() ?: 0.0) / 100.0
+        }
+    }
+
+    val calculatedSilverLabour by remember {
+        derivedStateOf {
+            calculatedSilverPercentMaking + calculatedRupeeMaking
         }
     }
 
@@ -1445,8 +1475,7 @@ fun ItemEditDialog(
                 if (billType == "SALE") calculatedGoldAmount + calculatedGoldLabour
                 else calculatedGoldAmount
             } else {
-                val rate = rateText.toDoubleOrNull() ?: 0.0
-                calculatedTotalFine * (rate / 1000.0) + calculatedRupeeMaking
+                calculatedSilverPrice + calculatedSilverLabour
             }
         }
     }
@@ -1607,9 +1636,8 @@ fun ItemEditDialog(
                         singleLine = true
                     )
 
-                    if (metalType == "GOLD") {
-                        OutlinedTextField(
-                            value = netWeightText,
+                    OutlinedTextField(
+                        value = netWeightText,
                             onValueChange = { netWeightText = it },
                             label = { Text(loc(en = "Net Weight (g)", gu = "નેટ વજન (ગ્રા)")) },
                             placeholder = { Text("0.000") },
@@ -1729,14 +1757,22 @@ fun ItemEditDialog(
                                     Text("${LanguageManager.formatDouble(makingPercentText.toDoubleOrNull() ?: 0.0, 1)}% = ${LanguageManager.formatCurrency(calculatedGoldLabour)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
                                 }
                             }
-                        } else Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(loc(en = "Touch %:", gu = "ટચ %:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${LanguageManager.formatDouble(effectiveTouch, 1)}%", fontWeight = FontWeight.Medium, fontSize = 12.sp)
-                        }
-                         if (calculatedRupeeMaking > 0.0 && metalType == "SILVER") {
+                        } else {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(loc(en = "Making (₹):", gu = "મજૂરી (₹):"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("+₹${LanguageManager.formatDouble(calculatedRupeeMaking, 0)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                Text("Silver Price:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(LanguageManager.formatCurrency(calculatedSilverPrice), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            if (calculatedSilverPercentMaking > 0.0) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Labour (${LanguageManager.formatDouble(makingPercentText.toDoubleOrNull() ?: 0.0, 1)}%):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(LanguageManager.formatCurrency(calculatedSilverPercentMaking), fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                }
+                            }
+                            if (calculatedRupeeMaking > 0.0) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Making (₹):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("+${LanguageManager.formatCurrency(calculatedRupeeMaking)}", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                                }
                             }
                         }
                         Divider(modifier = Modifier.padding(vertical = 2.dp))
@@ -1758,7 +1794,7 @@ fun ItemEditDialog(
                 onClick = {
                     val wt = weightText.toDoubleOrNull() ?: 0.0
                     val currentTouch = effectiveTouch
-                    val nw = if (metalType == "GOLD") (netWeightText.toDoubleOrNull() ?: 0.0) else wt
+                    val nw = netWeightText.toDoubleOrNull() ?: wt
                     val makingPct = makingPercentText.toDoubleOrNull() ?: 0.0
                     val rupeeMaking = calculatedRupeeMaking
 
