@@ -193,8 +193,7 @@ fun CreateBillScreen(
 
     val discount = discountText.toDoubleOrNull() ?: 0.0
     val oldMetal = oldMetalExchangeText.toDoubleOrNull() ?: 0.0
-    val otherCharges = otherChargeEntries.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
-    val grandTotal = (subtotal + gstAmount + cstAmount + otherCharges - discount - oldMetal).coerceAtLeast(0.0)
+    val grandTotal = (subtotal + gstAmount + cstAmount - discount - oldMetal).coerceAtLeast(0.0)
 
     val totalPaidFromPayments = payments.sumOf { it.amount }
     val cashReceivedOrPaid = if (payments.isNotEmpty()) totalPaidFromPayments else (cashReceivedOrPaidText.toDoubleOrNull() ?: 0.0)
@@ -497,8 +496,7 @@ fun CreateBillScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
-                            value = partyMobile,
-                            onValueChange = {
+                            value = partyMobile,                            onValueChange = {
                                 if (it.length <= 10 && it.all { c -> c.isDigit() }) partyMobile = it
                             },
                             label = { Text(AppStrings.partyMobile()) },
@@ -711,15 +709,6 @@ fun CreateBillScreen(
 
                         if (isCstBill) {
                             BillCalcRow("${AppStrings.cst()} (${LanguageManager.formatDouble(cstRate, 1)}%):", LanguageManager.formatCurrency(cstAmount))
-                        }
-
-                        // Show Other Charges separately in the grand-total breakdown.
-                        // The amount is automatically calculated from all Other Charges entries.
-                        if (otherCharges > 0) {
-                            BillCalcRow(
-                                "Other Charges:",
-                                LanguageManager.formatCurrency(otherCharges)
-                            )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -997,8 +986,7 @@ fun CreateBillScreen(
                                     metalTouch = if (isGold && isSplit && !isSale) 100.0 else totalTouch,
                                     metalRate = rate, fineWeight = if (isGold) paidFine else totalFine,
                                     note = if (isSale) "$metalName received (મેળવેલ $metalName)" else "$metalName paid (ચૂકવેલ $metalName)"
-                                )
-                                if (isSplit) {
+                                )                                if (isSplit) {
                                     val autoCash = if (isGold && !isSale) ((totalFine - paidFine).coerceAtLeast(0.0) * ratePerGram) else (grandTotal - metalVal).coerceAtLeast(0.0)
                                     val cashVal = cashS.toDoubleOrNull() ?: autoCash
                                     val cashPayment = BillPayment(
@@ -1497,8 +1485,7 @@ fun ItemEditDialog(
                 ?.takeIf { it.isNotBlank() } ?: ""
         )
     }
-    var goldTouchText by remember {
-        mutableStateOf(
+    var goldTouchText by remember {        mutableStateOf(
             initialItem?.currentTouch
                 ?.takeIf { it > 0 }
                 ?.let { LanguageManager.formatDouble(it, 1) } ?: ""
@@ -1998,275 +1985,3 @@ fun ItemEditDialog(
             ) {
                 Text(AppStrings.confirm(), fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(AppStrings.cancel()) }
-        }
-    )
-}
-
-@Composable
-fun PaymentEntryDialog(
-    initialPayment: BillPayment?,
-    billType: String = "SALE",
-    defaultGoldRate: Double = 0.0,
-    defaultSilverRate: Double = 0.0,
-    isGu: Boolean,
-    onDismiss: () -> Unit,
-    onSave: (BillPayment) -> Unit
-) {
-    var mode by remember { mutableStateOf(initialPayment?.paymentMode ?: "CASH") }
-    var amountText by remember {
-        mutableStateOf(if (initialPayment != null && initialPayment.amount > 0) LanguageManager.formatDouble(initialPayment.amount, 0) else "")
-    }
-    var metalWeightText by remember {
-        mutableStateOf(if (initialPayment != null && initialPayment.metalWeight > 0) LanguageManager.formatDouble(initialPayment.metalWeight, 3) else "")
-    }
-    var metalTouchText by remember {
-        mutableStateOf(if (initialPayment != null && initialPayment.metalTouch > 0) LanguageManager.formatDouble(initialPayment.metalTouch, 1) else "")
-    }
-    // Rate starts completely empty by default
-    var metalRateText by remember {
-        mutableStateOf(if (initialPayment != null && initialPayment.metalRate > 0) LanguageManager.formatDouble(initialPayment.metalRate, 0) else "")
-    }
-    var note by remember { mutableStateOf(initialPayment?.note ?: "") }
-
-    val calculatedAmount by remember {
-        derivedStateOf {
-            if (mode == "GOLD" || mode == "SILVER") {
-                val wt = metalWeightText.toDoubleOrNull() ?: 0.0
-                val touch = metalTouchText.toDoubleOrNull() ?: 0.0
-                val enteredRate = metalRateText.toDoubleOrNull() ?: 0.0
-                // Silver payment rate is entered/stored/displayed as ₹/kg.
-                // Convert the kg rate to ₹/g exactly once for gram-based calculation.
-                // Example: 1,000g × 100% × ₹234,000/kg ÷ 1,000 = ₹234,000.
-                val ratePerGram = if (mode == "SILVER") enteredRate / 1000.0 else enteredRate
-                (wt * touch / 100.0) * ratePerGram
-            } else {
-                amountText.toDoubleOrNull() ?: 0.0
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = if (initialPayment != null) AppStrings.edit() else AppStrings.addPaymentEntry(),
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = AppStrings.paymentMode(),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp
-                )
-                // Payment Mode Selection Chips
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = mode == "CASH",
-                        onClick = { mode = "CASH" },
-                        label = { Text(AppStrings.modeCash(), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = mode == "GOLD",
-                        onClick = {
-                            mode = "GOLD"
-                            metalTouchText = ""
-                        },
-                        label = { Text(AppStrings.modeGold(), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = mode == "SILVER",
-                        onClick = {
-                            mode = "SILVER"
-                            metalTouchText = ""
-                        },
-                        label = { Text(AppStrings.modeSilver(), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = mode == "ONLINE",
-                        onClick = { mode = "ONLINE" },
-                        label = { Text(AppStrings.modeOnline(), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = mode == "CHEQUE",
-                        onClick = { mode = "CHEQUE" },
-                        label = { Text(AppStrings.modeCheque(), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                if (mode == "GOLD" || mode == "SILVER") {
-                    Text(
-                        text = if (mode == "GOLD") loc(en = "Pay by Gold Metal", gu = "સોનાની ધાતુ આપી ચૂકવણી")
-                        else loc(en = "Pay by Silver Metal", gu = "ચાંદીની ધાતુ આપી ચૂકવણી"),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = GoldDark
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = metalWeightText,
-                            onValueChange = { metalWeightText = it },
-                            label = { Text(AppStrings.weightGram()) },
-                            placeholder = { Text("0.000") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = metalRateText,
-                            onValueChange = { metalRateText = it },
-                            label = {
-                                Text(
-                                    if (mode == "SILVER") loc(en = "Silver Price (₹/kg)", gu = "ચાંદી ભાવ (₹/કિલો)")
-                                    else loc(en = "Gold Price (₹/g)", gu = "સોના ભાવ (₹/ગ્રામ)")
-                                )
-                            },
-                            placeholder = {
-                                Text(
-                                    if (mode == "SILVER") loc(en = "₹/kg (Enter Price)", gu = "₹/કિલો (ભાવ દાખલ કરો)")
-                                    else loc(en = "₹/g (Enter Price)", gu = "₹/ગ્રામ (ભાવ દાખલ કરો)")
-                                )
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                    }
-                    OutlinedTextField(
-                        value = metalTouchText,
-                        onValueChange = { metalTouchText = it },
-                        label = { Text(AppStrings.currentTouch()) },
-                        placeholder = { Text("99.5%") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-
-                    // Live Mathematical Formula Box (Exact matching handwritten paper)
-                    val wt = metalWeightText.toDoubleOrNull() ?: 0.0
-                    val touch = metalTouchText.toDoubleOrNull() ?: 0.0
-                    val fine = if (wt > 0.0) (wt * touch / 100.0) else 0.0
-                    val rate = metalRateText.toDoubleOrNull() ?: 0.0
-                    val rateUnit = if (mode == "SILVER") (if (isGu) "/કિલો" else "/kg") else (if (isGu) "/ગ્રા" else "/g")
-                    val fineLabel = if (isGu) "ફાઇન" else "FINE"
-                    val priceLabel = if (isGu) "ભાવ" else "CURRENT PRICE"
-
-                    Surface(
-                        color = GoldLight.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(8.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.5f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(
-                                text = loc(en = "Calculation Formula (ગણતરી):", gu = "ગણતરી ફોર્મ્યુલા:"),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldDark
-                            )
-                            Text(
-                                text = "${LanguageManager.formatDouble(wt, 3)}g . ${LanguageManager.formatDouble(touch, 1)}% = ${LanguageManager.formatDouble(fine, 3)}g $fineLabel",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF1E293B)
-                            )
-                            Text(
-                                text = "${LanguageManager.formatDouble(fine, 3)}g × $priceLabel (${LanguageManager.formatDouble(rate, 0)}$rateUnit) = ${LanguageManager.formatCurrency(calculatedAmount)}",
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldDark
-                            )
-                        }
-                    }
-                } else {
-                    OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it },
-                        label = { Text(AppStrings.paidAmount()) },
-                        placeholder = { Text("₹ 0") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text(AppStrings.remarks()) },
-                    placeholder = { Text("e.g. 1st installment, advance, cash counter") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-
-                Surface(
-                    color = CashGreen.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(AppStrings.itemAmount(), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text(
-                            text = LanguageManager.formatCurrency(calculatedAmount),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = CashGreen
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val finalAmount = calculatedAmount
-                    val wt = if (mode == "GOLD" || mode == "SILVER") (metalWeightText.toDoubleOrNull() ?: 0.0) else 0.0
-                    val touch = if (mode == "GOLD" || mode == "SILVER") (metalTouchText.toDoubleOrNull() ?: 0.0) else 0.0
-                    val rate = if (mode == "GOLD" || mode == "SILVER") (metalRateText.toDoubleOrNull() ?: 0.0) else 0.0
-                    val fine = if (wt > 0.0) (wt * touch / 100.0) else 0.0
-
-                    val payment = BillPayment(
-                        id = initialPayment?.id ?: UUID.randomUUID().toString(),
-                        entryNumber = initialPayment?.entryNumber ?: 1,
-                        dateTimestamp = initialPayment?.dateTimestamp ?: System.currentTimeMillis(),
-                        paymentMode = mode,
-                        amount = finalAmount,
-                        metalWeight = wt,
-                        metalTouch = touch,
-                        metalRate = rate,
-                        fineWeight = fine,
-                        note = note.trim()
-                    )
-                    onSave(payment)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = GoldDark)
-            ) {
-                Text(AppStrings.confirm(), fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(AppStrings.cancel()) }
-        }
-    )
-}
