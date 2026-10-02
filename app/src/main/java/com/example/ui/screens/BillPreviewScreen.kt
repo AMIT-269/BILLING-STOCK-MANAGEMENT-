@@ -643,8 +643,8 @@ fun BillPreviewScreen(
                                             TableCell("Net Weight", 75.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Rate", 80.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Silver Price", 90.dp, isHeader = true, align = TextAlign.Start)
-                                            TableCell("Labour (AUTO)", 90.dp, isHeader = true, align = TextAlign.Start)
-                                            TableCell("Total Amount (AUTO)", 100.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Labour", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Total Amount", 100.dp, isHeader = true, align = TextAlign.Start)
                                         } else {
                                             TableCell(if (goldOnly) "Gross Wt" else AppStrings.colWeight(), 75.dp, isHeader = true, align = TextAlign.End)
                                             TableCell(if (goldOnly) "Net Wt" else AppStrings.colTouch(), 75.dp, isHeader = true, align = TextAlign.End)
@@ -700,7 +700,7 @@ fun BillPreviewScreen(
                                                 TableCell(LanguageManager.formatDouble(item.netWeight, 3), 75.dp, align = TextAlign.Start)
                                                 TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg", 80.dp, align = TextAlign.Start)
                                                 TableCell(LanguageManager.formatDouble(item.netWeight * (item.ratePerGram / 1000.0), 2), 90.dp, align = TextAlign.Start)
-                                                TableCell(LanguageManager.formatDouble((item.netWeight * (item.ratePerGram / 1000.0) * item.makingChargePercent / 100.0) + (item.makingCharges * item.netWeight), 2), 90.dp, align = TextAlign.Start)
+                                                TableCell(LanguageManager.formatDouble((item.netWeight * (item.ratePerGram / 1000.0) * item.makingChargePercent / 100.0) + item.makingCharges, 2), 90.dp, align = TextAlign.Start)
                                                 TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                             } else {
                                                 if (goldOnly) {
