@@ -715,7 +715,9 @@ fun CreateBillScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Other Charges: multiple line items with automatic total.
+                        // Other Charges: persistent manual line items with automatic total.
+                        // The Add Charge button is always visible; charge names are completely
+                        // manual because a jeweller can charge for any jewellery/service.
                         Card(
                             modifier = Modifier.fillMaxWidth().testTag("bill_other_charges_box"),
                             shape = RoundedCornerShape(8.dp),
@@ -727,104 +729,102 @@ fun CreateBillScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(
-                                        text = "Other Charges",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = GoldDark
-                                    )
-                                    TextButton(
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Other Charges",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = GoldDark
+                                        )
+                                        Text(
+                                            text = "Add any jewellery or service charge manually",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Button(
                                         onClick = { otherChargeEntries.add(OtherChargeEntry()) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp),
                                         modifier = Modifier.testTag("add_other_charge_btn")
                                     ) {
                                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("Add")
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Add Charge", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
-                                // Quick charge options. Selecting an option creates a separate
-                                // line with its own amount box; the total below is recalculated live.
+                                // Optional quick options. They are only shortcuts; every row
+                                // remains editable, so any jewellery/service name can be entered.
+                                Text(
+                                    text = "Quick options (optional)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
-                                    listOf("HUID RING", "HUID TOPS", "RHODIUM").forEach { preset ->
+                                    listOf("HUID RING", "HUID TOPS", "RHODIUM", "AD", "MOTI").forEach { preset ->
                                         FilterChip(
-                                            selected = otherChargeEntries.any { it.name.equals(preset, ignoreCase = true) },
+                                            selected = false,
                                             onClick = {
-                                                val existingIndex = otherChargeEntries.indexOfFirst {
-                                                    it.name.equals(preset, ignoreCase = true)
-                                                }
-                                                if (existingIndex < 0) {
-                                                    otherChargeEntries.add(OtherChargeEntry(name = preset))
-                                                }
+                                                otherChargeEntries.add(OtherChargeEntry(name = preset))
                                             },
-                                            label = { Text(preset, fontSize = 9.sp) },
-                                            modifier = Modifier.weight(1f)
+                                            label = { Text(preset, fontSize = 9.sp) }
                                         )
                                     }
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    listOf("AD", "MOTI").forEach { preset ->
-                                        FilterChip(
-                                            selected = otherChargeEntries.any { it.name.equals(preset, ignoreCase = true) },
-                                            onClick = {
-                                                val existingIndex = otherChargeEntries.indexOfFirst {
-                                                    it.name.equals(preset, ignoreCase = true)
-                                                }
-                                                if (existingIndex < 0) {
-                                                    otherChargeEntries.add(OtherChargeEntry(name = preset))
-                                                }
-                                            },
-                                            label = { Text(preset, fontSize = 9.sp) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.weight(1f))
                                 }
 
                                 if (otherChargeEntries.isEmpty()) {
                                     Text(
-                                        text = "Select HUID RING / HUID TOPS / RHODIUM or tap Add for another charge.",
+                                        text = "Tap Add Charge and enter any name, for example: HUID BANGLE, HUID CHAIN, POLISH, LABOUR.",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else {
                                     otherChargeEntries.forEachIndexed { index, entry ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            OutlinedTextField(
-                                                value = entry.name,
-                                                onValueChange = { value ->
-                                                    otherChargeEntries[index] = entry.copy(name = value)
-                                                },
-                                                label = { Text("Charge") },
-                                                placeholder = { Text("RING HUID") },
-                                                modifier = Modifier.weight(1.4f).testTag("other_charge_name_$index"),
-                                                singleLine = true
-                                            )
-                                            OutlinedTextField(
-                                                value = entry.amount,
-                                                onValueChange = { value ->
-                                                    otherChargeEntries[index] = entry.copy(amount = value)
-                                                },
-                                                label = { Text("Amount") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                modifier = Modifier.weight(0.8f).testTag("other_charge_amount_$index"),
-                                                singleLine = true
-                                            )
-                                            IconButton(
-                                                onClick = { otherChargeEntries.removeAt(index) },
-                                                modifier = Modifier.size(40.dp)
+                                        key("other_charge_entry_$index") {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = DebitRed)
+                                                OutlinedTextField(
+                                                    value = entry.name,
+                                                    onValueChange = { value ->
+                                                        if (index < otherChargeEntries.size) {
+                                                            otherChargeEntries[index] = otherChargeEntries[index].copy(name = value)
+                                                        }
+                                                    },
+                                                    label = { Text("Charge Name") },
+                                                    placeholder = { Text("Any jewellery / service") },
+                                                    modifier = Modifier.weight(1.4f).testTag("other_charge_name_$index"),
+                                                    singleLine = true
+                                                )
+                                                OutlinedTextField(
+                                                    value = entry.amount,
+                                                    onValueChange = { value ->
+                                                        if (index < otherChargeEntries.size) {
+                                                            otherChargeEntries[index] = otherChargeEntries[index].copy(amount = value)
+                                                        }
+                                                    },
+                                                    label = { Text("Amount") },
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                    modifier = Modifier.weight(0.8f).testTag("other_charge_amount_$index"),
+                                                    singleLine = true
+                                                )
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index < otherChargeEntries.size) {
+                                                            otherChargeEntries.removeAt(index)
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(40.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = DebitRed)
+                                                }
                                             }
                                         }
                                     }
