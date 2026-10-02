@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -73,20 +72,7 @@ fun CreateBillScreen(
 
     var discountText by remember { mutableStateOf("0") }
     var oldMetalExchangeText by remember { mutableStateOf("0") }
-    var otherChargeEntries by rememberSaveable(
-        stateSaver = listSaver<OtherChargeEntry, Any>(
-            save = { entries -> entries.map { listOf(it.name, it.amount) } },
-            restore = { saved ->
-                saved.map { row ->
-                    val values = row as List<*>
-                    OtherChargeEntry(
-                        name = values.getOrNull(0) as? String ?: "",
-                        amount = values.getOrNull(1) as? String ?: ""
-                    )
-                }
-            }
-        )
-    ) { mutableStateOf(emptyList()) }
+    var otherChargeEntries by remember { mutableStateOf(emptyList<OtherChargeEntry>()) }
     var cashReceivedOrPaidText by remember { mutableStateOf("0") }
 
     val items = remember { mutableStateListOf<BillItem>() }
