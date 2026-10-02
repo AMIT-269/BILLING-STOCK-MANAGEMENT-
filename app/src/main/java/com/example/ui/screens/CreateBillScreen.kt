@@ -1835,11 +1835,7 @@ fun ItemEditDialog(
                         totalTouch = totalTouch,
                         totalFine = totalFine,
                         ratePerGram = rate,
-                        makingCharges = when {
-                            metalType == "GOLD" && billType == "SALE" -> calculatedGoldLabour
-                            metalType == "SILVER" -> calculatedRupeeMaking
-                            else -> rupeeMaking
-                        },
+                        makingCharges = if (metalType == "GOLD" && billType == "SALE") calculatedGoldLabour else rupeeMaking,
                         itemTotal = total,
                         stockClassification = stockClassification
                     )
