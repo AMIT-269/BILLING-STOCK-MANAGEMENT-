@@ -1716,18 +1716,11 @@ fun ItemEditDialog(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                if (metalType == "SILVER") Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = makingRupeeMode == "PER_GRAM",
-                        onClick = { makingRupeeMode = "PER_GRAM" },
-                        label = { Text(loc(en = "Per Gram (₹/g)", gu = "પ્રતિ ગ્રામ (₹/ગ્રા)"), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = makingRupeeMode == "FLAT",
-                        onClick = { makingRupeeMode = "FLAT" },
-                        label = { Text(loc(en = "Flat (₹ Total)", gu = "ફિક્સ રકમ (₹)"), fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
+                if (metalType == "SILVER") {
+                    Text(
+                        text = loc(en = "Making ₹ is calculated per gram", gu = "મેકિંગ ₹ પ્રતિ ગ્રામ પ્રમાણે ગણાશે"),
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
