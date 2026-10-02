@@ -708,6 +708,43 @@ fun CreateBillScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Other Charges stays at bill level so it does not disappear when Add Item closes.
+                        Card(
+                            modifier = Modifier.fillMaxWidth().testTag("bill_other_charges_box"),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Other Charges",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = GoldDark
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = otherChargesRemarkText,
+                                        onValueChange = { otherChargesRemarkText = it },
+                                        label = { Text("Remark") },
+                                        placeholder = { Text("Rhodium / HUID / AD / Moti etc.") },
+                                        modifier = Modifier.weight(1.4f).testTag("bill_other_charges_remark"),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = otherChargesText,
+                                        onValueChange = { otherChargesText = it },
+                                        label = { Text("Amount") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(0.8f).testTag("bill_other_charges_amount"),
+                                        singleLine = true
+                                    )
+                                }
+                            }
+                        }
+
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedTextField(
                                 value = discountText,
@@ -1727,43 +1764,6 @@ fun ItemEditDialog(
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-
-                // Other Charges: entered inside Add Item, but added once at bill level.
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("dialog_other_charges_box"),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "Other Charges",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = GoldDark
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = initialOtherChargesRemark,
-                                onValueChange = { onOtherChargesChange(initialOtherCharges, it) },
-                                label = { Text("Remark") },
-                                placeholder = { Text("Rhodium / HUID / AD / Moti etc.") },
-                                modifier = Modifier.weight(1.4f).testTag("dialog_other_charges_remark"),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = initialOtherCharges,
-                                onValueChange = { onOtherChargesChange(it, initialOtherChargesRemark) },
-                                label = { Text("Amount") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.weight(0.8f).testTag("dialog_other_charges_amount"),
-                                singleLine = true
-                            )
-                        }
-                    }
-                }
 
                 // Real-time breakdown card
                 Surface(
