@@ -1691,6 +1691,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                         "cashReceivedOrPaid" to bill.cashReceivedOrPaid,
                         "oldMetalExchangeAmount" to bill.oldMetalExchangeAmount,
                         "otherCharges" to bill.otherCharges,
+                        "otherChargesRemark" to bill.otherChargesRemark,
                         "netBalanceDue" to bill.netBalanceDue,
                         "notes" to bill.notes,
                         "paymentsJson" to bill.paymentsJson,
@@ -1744,6 +1745,7 @@ class CloudSyncManager private constructor(private val context: Context) {
                 put("cashReceivedOrPaid", bill.cashReceivedOrPaid)
                 put("oldMetalExchangeAmount", bill.oldMetalExchangeAmount)
                 put("otherCharges", bill.otherCharges)
+                put("otherChargesRemark", bill.otherChargesRemark)
                 put("netBalanceDue", bill.netBalanceDue)
                 put("notes", bill.notes)
                 put("paymentsJson", bill.paymentsJson)
