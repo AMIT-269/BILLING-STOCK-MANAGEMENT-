@@ -80,7 +80,7 @@ object BillShareHelper {
                 val labour = silverPrice * item.makingChargePercent / 100.0 + item.makingCharges
                 sb.append("   Gross: ${LanguageManager.formatDouble(item.grossWeight, 3)}g | Net: ${LanguageManager.formatDouble(item.netWeight, 3)}g\n")
                 sb.append("   Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg | Silver Price: ${LanguageManager.formatCurrency(silverPrice)}\n")
-                sb.append("   Labour: ${LanguageManager.formatCurrency(labour)} | Total Amount: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
+                sb.append("   Labour (AUTO): ${LanguageManager.formatCurrency(labour)} | Total Amount: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
             } else {
                 val puritySuffix = if (item.purity.isNotBlank()) " - ${item.purity}" else ""
                 sb.append("   Wt: ${LanguageManager.formatDouble(wt, 3)}$wtUnit | Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/${if (isGu) "ગ્રામ" else "g"}$puritySuffix\n")
