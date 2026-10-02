@@ -642,8 +642,8 @@ fun BillPreviewScreen(
                                             TableCell("Gross Weight", 75.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Net Weight", 75.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Rate", 80.dp, isHeader = true, align = TextAlign.Start)
-                                            TableCell("Silver Price", 90.dp, isHeader = true, align = TextAlign.Start)
-                                            TableCell("Labour (AUTO)", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Silver Amount", 90.dp, isHeader = true, align = TextAlign.Start)
+                                            TableCell("Labour", 90.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Other Charges", 100.dp, isHeader = true, align = TextAlign.Start)
                                             TableCell("Total Amount", 100.dp, isHeader = true, align = TextAlign.Start)
                                         } else {
@@ -676,7 +676,7 @@ fun BillPreviewScreen(
                                         val totalFineFormatted = LanguageManager.formatDouble(item.totalFine, 3)
                                         val rateUnit = if (item.metalType == "SILVER") "/kg" else "/g"
                                         val priceFormatted = "${LanguageManager.formatDouble(item.ratePerGram, 0)}$rateUnit"
-                                        val amountFormatted = LanguageManager.formatDouble(item.itemTotal, 2)
+                                        val amountFormatted = LanguageManager.formatDouble(item.itemTotal + if (index == items.lastIndex) bill.otherCharges else 0.0, 2)
 
                                         Row(
                                             modifier = Modifier
