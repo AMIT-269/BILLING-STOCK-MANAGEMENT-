@@ -784,10 +784,10 @@ fun BillPreviewScreen(
                                                 color = Color(0xFFB45309)
                                             )
                                         }
-                                        if (bill.otherCharges > 0) {
+                                        if (bill.otherCharges > 0 || bill.otherChargesRemark.isNotBlank()) {
                                             MiniRow(
-                                                title = "Other Charges:",
-                                                value = "+ ${LanguageManager.formatCurrency(bill.otherCharges)}",
+                                                title = if (bill.otherChargesRemark.isNotBlank()) "Other Charges (${bill.otherChargesRemark}):" else "Other Charges:",
+                                                value = if (bill.otherCharges > 0) "+ ${LanguageManager.formatCurrency(bill.otherCharges)}" else LanguageManager.formatCurrency(0.0),
                                                 color = GoldDark
                                             )
                                         }
