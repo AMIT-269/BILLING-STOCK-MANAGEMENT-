@@ -478,7 +478,7 @@ object BluetoothPrinterHelper {
                 writeLine(String.format(Locale.US, "  Amount: Rs. %.2f", item.itemTotal))
             } else if (silverOnly) {
                 val silverPrice = item.netWeight * (item.ratePerGram / 1000.0)
-                val labour = silverPrice * item.makingChargePercent / 100.0 + (item.makingCharges * item.netWeight)
+                val labour = silverPrice * item.makingChargePercent / 100.0 + item.makingCharges
                 writeLine(String.format(Locale.US, "%d | %s | Silver", items.indexOf(item) + 1, item.description.take(14)))
                 writeLine(String.format(Locale.US, "  Gross: %.3fg | Net: %.3fg | Rate: Rs. %.0f/kg", item.grossWeight, item.netWeight, item.ratePerGram))
                 writeLine(String.format(Locale.US, "  Silver Price: Rs. %.2f | Labour: Rs. %.2f", silverPrice, labour))
