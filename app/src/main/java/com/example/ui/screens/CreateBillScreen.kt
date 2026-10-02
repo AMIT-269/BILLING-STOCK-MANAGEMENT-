@@ -36,6 +36,8 @@ import com.example.ui.viewmodel.JewelleryViewModel
 import java.util.UUID
 import kotlinx.coroutines.launch
 
+data class OtherChargeEntry(val name: String = "", val amount: String = "")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateBillScreen(
@@ -70,8 +72,7 @@ fun CreateBillScreen(
 
     var discountText by remember { mutableStateOf("0") }
     var oldMetalExchangeText by remember { mutableStateOf("0") }
-    var otherChargesText by remember { mutableStateOf("") }
-    var otherChargesRemarkText by remember { mutableStateOf("") }
+    val otherChargeEntries = remember { mutableStateListOf<OtherChargeEntry>() }
     var cashReceivedOrPaidText by remember { mutableStateOf("0") }
 
     val items = remember { mutableStateListOf<BillItem>() }
@@ -121,8 +122,19 @@ fun CreateBillScreen(
                 notes = b.notes
                 discountText = if (b.discount > 0) LanguageManager.formatDouble(b.discount, 0) else "0"
                 oldMetalExchangeText = if (b.oldMetalExchangeAmount > 0) LanguageManager.formatDouble(b.oldMetalExchangeAmount, 0) else "0"
-                otherChargesText = if (b.otherCharges > 0) LanguageManager.formatDouble(b.otherCharges, 0) else ""
-                otherChargesRemarkText = b.otherChargesRemark
+                otherChargeEntries.clear()
+                if (b.otherChargesRemark.isNotBlank()) {
+                    b.otherChargesRemark.lines().forEach { line ->
+                        val parts = line.split("|", limit = 2)
+                        if (parts.size == 2 && parts[0].isNotBlank()) {
+                            otherChargeEntries.add(OtherChargeEntry(parts[0].trim(), parts[1].trim()))
+                        }
+                    }
+                }
+                // Backward compatibility for older bills that stored one remark + one total.
+                if (otherChargeEntries.isEmpty() && b.otherCharges > 0) {
+                    otherChargeEntries.add(OtherChargeEntry(b.otherChargesRemark.ifBlank { "Other Charges" }, LanguageManager.formatDouble(b.otherCharges, 0)))
+                }
                 cashReceivedOrPaidText = if (b.cashReceivedOrPaid > 0) LanguageManager.formatDouble(b.cashReceivedOrPaid, 0) else "0"
                 existingBillCreatedAt = b.createdAt
                 existingBillDateTimestamp = b.dateTimestamp
@@ -181,7 +193,7 @@ fun CreateBillScreen(
 
     val discount = discountText.toDoubleOrNull() ?: 0.0
     val oldMetal = oldMetalExchangeText.toDoubleOrNull() ?: 0.0
-    val otherCharges = otherChargesText.toDoubleOrNull() ?: 0.0
+    val otherCharges = otherChargeEntries.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     val grandTotal = (subtotal + gstAmount + cstAmount + otherCharges - discount - oldMetal).coerceAtLeast(0.0)
 
     val totalPaidFromPayments = payments.sumOf { it.amount }
@@ -197,12 +209,7 @@ fun CreateBillScreen(
             // Silver payment rate is always entered as ₹/kg. Do not inject the legacy
             // settings silver rate here because older settings may be stored as ₹/g.
             defaultSilverRate = 0.0,
-            initialOtherCharges = otherChargesText,
-            initialOtherChargesRemark = otherChargesRemarkText,
-            onOtherChargesChange = { amount, remark ->
-                otherChargesText = amount
-                otherChargesRemarkText = remark
-            },
+
             isGu = isGu,
             onDismiss = {
                 showAddItemDialog = false
@@ -708,39 +715,91 @@ fun CreateBillScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Other Charges stays at bill level so it does not disappear when Add Item closes.
+                        // Other Charges: multiple line items with automatic total.
                         Card(
                             modifier = Modifier.fillMaxWidth().testTag("bill_other_charges_box"),
                             shape = RoundedCornerShape(8.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = "Other Charges",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = GoldDark
-                                )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    OutlinedTextField(
-                                        value = otherChargesRemarkText,
-                                        onValueChange = { otherChargesRemarkText = it },
-                                        label = { Text("Remark") },
-                                        placeholder = { Text("Rhodium / HUID / AD / Moti etc.") },
-                                        modifier = Modifier.weight(1.4f).testTag("bill_other_charges_remark"),
-                                        singleLine = true
+                                    Text(
+                                        text = "Other Charges",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = GoldDark
                                     )
-                                    OutlinedTextField(
-                                        value = otherChargesText,
-                                        onValueChange = { otherChargesText = it },
-                                        label = { Text("Amount") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                        modifier = Modifier.weight(0.8f).testTag("bill_other_charges_amount"),
-                                        singleLine = true
+                                    TextButton(
+                                        onClick = { otherChargeEntries.add(OtherChargeEntry()) },
+                                        modifier = Modifier.testTag("add_other_charge_btn")
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("Add")
+                                    }
+                                }
+
+                                if (otherChargeEntries.isEmpty()) {
+                                    Text(
+                                        text = "Rhodium / HUID / AD / Moti etc.",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                } else {
+                                    otherChargeEntries.forEachIndexed { index, entry ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            OutlinedTextField(
+                                                value = entry.name,
+                                                onValueChange = { value ->
+                                                    otherChargeEntries[index] = entry.copy(name = value)
+                                                },
+                                                label = { Text("Charge") },
+                                                placeholder = { Text("RING HUID") },
+                                                modifier = Modifier.weight(1.4f).testTag("other_charge_name_$index"),
+                                                singleLine = true
+                                            )
+                                            OutlinedTextField(
+                                                value = entry.amount,
+                                                onValueChange = { value ->
+                                                    otherChargeEntries[index] = entry.copy(amount = value)
+                                                },
+                                                label = { Text("Amount") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                                modifier = Modifier.weight(0.8f).testTag("other_charge_amount_$index"),
+                                                singleLine = true
+                                            )
+                                            IconButton(
+                                                onClick = { otherChargeEntries.removeAt(index) },
+                                                modifier = Modifier.size(40.dp)
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = DebitRed)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (otherCharges > 0.0) {
+                                    Divider()
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Other Charges Total", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text(
+                                            LanguageManager.formatCurrency(otherCharges),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 14.sp,
+                                            color = GoldDark
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1278,6 +1337,7 @@ fun CreateBillScreen(
                             cashReceivedOrPaid = cashReceivedOrPaid,
                             oldMetalExchangeAmount = oldMetal,
                             otherCharges = otherCharges,
+                            otherChargesRemark = otherChargeEntries.filter { it.name.isNotBlank() }.joinToString("\n") { "${it.name.trim()}|${it.amount.trim()}" },
                             netBalanceDue = netBalanceDue,
                             notes = notes.trim(),
                             createdAt = if (isEditMode) existingBillCreatedAt else System.currentTimeMillis(),
