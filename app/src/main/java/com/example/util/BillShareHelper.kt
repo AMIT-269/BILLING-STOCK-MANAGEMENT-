@@ -77,7 +77,7 @@ object BillShareHelper {
             sb.append("${idx + 1}. *${item.description}* ($metalLabel)\n")
             if (item.metalType == "SILVER") {
                 val silverPrice = item.netWeight * (item.ratePerGram / 1000.0)
-                val labour = silverPrice * item.makingChargePercent / 100.0 + item.makingCharges
+                val labour = silverPrice * item.makingChargePercent / 100.0 + (item.makingCharges * item.netWeight)
                 sb.append("   Gross: ${LanguageManager.formatDouble(item.grossWeight, 3)}g | Net: ${LanguageManager.formatDouble(item.netWeight, 3)}g\n")
                 sb.append("   Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg | Silver Price: ${LanguageManager.formatCurrency(silverPrice)}\n")
                 sb.append("   Labour (AUTO): ${LanguageManager.formatCurrency(labour)} | Total: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
