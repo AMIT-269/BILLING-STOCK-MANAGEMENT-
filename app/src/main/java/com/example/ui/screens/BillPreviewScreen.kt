@@ -814,7 +814,11 @@ fun BillPreviewScreen(
                                                 )
                                             }
                                         }
-                                                                        // Totals Card
+                                                                        
+                                    }
+                                }
+
+                                // Totals Card
                                 Card(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),
