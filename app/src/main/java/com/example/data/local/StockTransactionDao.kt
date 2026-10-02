@@ -59,6 +59,9 @@ interface StockTransactionDao {
     @Query("UPDATE stock_transactions SET accountId = :targetAccountId WHERE accountId IS NULL OR accountId = '' OR accountId NOT IN (SELECT accountId FROM jeweller_accounts)")
     suspend fun adoptOrphanTransactions(targetAccountId: String)
 
+    @Query("DELETE FROM stock_transactions WHERE accountId = :accountId AND isAutomaticFromBill = 1 AND linkedBillId IS NOT NULL AND linkedBillId != '' AND linkedBillId NOT IN (SELECT id FROM bills WHERE accountId = :accountId)")
+    suspend fun deleteAutomaticTransactionsWithoutBills(accountId: String)
+
     @Query("DELETE FROM stock_transactions WHERE accountId = :accountId")
     suspend fun deleteAllTransactionsForAccount(accountId: String)
 }
