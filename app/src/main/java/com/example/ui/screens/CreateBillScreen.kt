@@ -713,6 +713,15 @@ fun CreateBillScreen(
                             BillCalcRow("${AppStrings.cst()} (${LanguageManager.formatDouble(cstRate, 1)}%):", LanguageManager.formatCurrency(cstAmount))
                         }
 
+                        // Show Other Charges separately in the grand-total breakdown.
+                        // The amount is automatically calculated from all Other Charges entries.
+                        if (otherCharges > 0) {
+                            BillCalcRow(
+                                "Other Charges:",
+                                LanguageManager.formatCurrency(otherCharges)
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Other Charges: persistent manual line items with automatic total.
