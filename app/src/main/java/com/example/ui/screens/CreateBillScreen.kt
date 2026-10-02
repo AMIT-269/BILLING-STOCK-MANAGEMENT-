@@ -1502,8 +1502,17 @@ fun ItemEditDialog(
     var makingPercentText by remember {
         mutableStateOf(if (initialItem != null && initialItem.makingChargePercent > 0) LanguageManager.formatDouble(initialItem.makingChargePercent, 1) else "")
     }
+    // Silver Making (₹/g) is entered as a rate, while BillItem.makingCharges stores
+    // the calculated total labour amount. When editing an existing item, convert the
+    // stored total back to ₹/g first; otherwise 50g × stored ₹1,250 total = ₹62,500.
     var makingRupeesText by remember {
-        mutableStateOf(if (initialItem != null && initialItem.makingCharges > 0) LanguageManager.formatDouble(initialItem.makingCharges, 0) else "")
+        mutableStateOf(
+            if (initialItem != null && initialItem.makingCharges > 0) {
+                val existingWeight = if (initialItem.netWeight > 0) initialItem.netWeight else initialItem.grossWeight
+                val existingPerGram = if (existingWeight > 0) initialItem.makingCharges / existingWeight else initialItem.makingCharges
+                LanguageManager.formatDouble(existingPerGram, 2)
+            } else ""
+        )
     }
     var makingRupeeMode by remember {
         mutableStateOf("PER_GRAM") // "PER_GRAM" (₹/g) or "FLAT" (₹ total)
