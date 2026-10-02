@@ -1643,9 +1643,8 @@ fun ItemEditDialog(
                             placeholder = { Text("0.000") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.weight(1f).testTag("dialog_item_net_wt"),
-                            singleLine = true
-                        )
-                    }
+                        singleLine = true
+                    )
 
                     OutlinedTextField(
                         value = rateText,
