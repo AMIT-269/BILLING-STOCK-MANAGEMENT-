@@ -90,6 +90,7 @@ fun CreateBillScreen(
     var editingItemIndex by remember { mutableStateOf<Int?>(null) }
 
     var showAddPaymentDialog by remember { mutableStateOf(false) }
+    var showPaymentOptionsMenu by remember { mutableStateOf(false) }
     var showSplitGoldCashDialog by remember { mutableStateOf(false) }
     var editingPaymentIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -886,81 +887,89 @@ fun CreateBillScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Primary Payment Mode Selector (Cash, Gold, Silver, Online, Cheque)
-                        Text(
-                            text = AppStrings.paymentMode(),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            FilterChip(
-                                selected = paymentMode == "CASH",
-                                onClick = { paymentMode = "CASH" },
-                                label = { Text(AppStrings.modeCash(), fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = paymentMode == "GOLD_CASH",
-                                onClick = {
-                                    paymentMode = "GOLD_CASH"
-                                    inlineMetalWeightText = ""
-                                    inlineMetalTouchText = ""
-                                    if (inlineMetalRateText.isBlank()) {
-                                        val defRate = settings?.goldRate22k ?: 7200.0
-                                        if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
-                                    }
-                                },
-                                label = { Text(loc(en = "Gold + Cash", gu = "સોનું + રોકડ"), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                modifier = Modifier.weight(1.3f)
-                            )
-                            FilterChip(
-                                selected = paymentMode == "SILVER_CASH",
-                                onClick = {
-                                    paymentMode = "SILVER_CASH"
-                                    inlineMetalWeightText = ""
-                                    inlineMetalTouchText = ""
-                                    if (inlineMetalRateText.isBlank()) {
-                                        val defRate = 0.0
-                                        if (defRate > 0) inlineMetalRateText = LanguageManager.formatDouble(defRate, 0)
-                                    }
-                                },
-                                label = { Text(loc(en = "Silver + Cash", gu = "ચાંદી + રોકડ"), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                modifier = Modifier.weight(1.3f)
-                            )
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            FilterChip(
-                                selected = paymentMode == "GOLD",
-                                onClick = {
-                                    paymentMode = "GOLD"
-                                    // Payment fields start blank; no automatic 6g or rate.
-                                },
-                                label = { Text(AppStrings.modeGold(), fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = paymentMode == "SILVER",
-                                onClick = {
-                                    paymentMode = "SILVER"
-                                    // Payment fields start blank; no automatic weight or rate.
-                                },
-                                label = { Text(AppStrings.modeSilver(), fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = paymentMode == "ONLINE",
-                                onClick = { paymentMode = "ONLINE" },
-                                label = { Text(AppStrings.modeOnline(), fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = paymentMode == "CHEQUE",
-                                onClick = { paymentMode = "CHEQUE" },
-                                label = { Text(AppStrings.modeCheque(), fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
+                        // Add Payment: keep the main screen clean and put all payment/instalment choices inside.
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box {
+                                Button(
+                                    onClick = { showPaymentOptionsMenu = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(AppStrings.addPaymentEntry(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                DropdownMenu(
+                                    expanded = showPaymentOptionsMenu,
+                                    onDismissRequest = { showPaymentOptionsMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(AppStrings.modeCash()) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            paymentMode = "CASH"
+                                            editingPaymentIndex = null
+                                            showAddPaymentDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(AppStrings.modeGold()) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            paymentMode = "GOLD"
+                                            editingPaymentIndex = null
+                                            showAddPaymentDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(AppStrings.modeSilver()) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            paymentMode = "SILVER"
+                                            editingPaymentIndex = null
+                                            showAddPaymentDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(AppStrings.modeOnline()) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            paymentMode = "ONLINE"
+                                            editingPaymentIndex = null
+                                            showAddPaymentDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(AppStrings.modeCheque()) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            paymentMode = "CHEQUE"
+                                            editingPaymentIndex = null
+                                            showAddPaymentDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(loc(en = "Gold + Cash", gu = "સોનું + રોકડ"), fontWeight = FontWeight.Bold) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            showSplitGoldCashDialog = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(loc(en = "Silver + Cash", gu = "ચાંદી + રોકડ"), fontWeight = FontWeight.Bold) },
+                                        onClick = {
+                                            showPaymentOptionsMenu = false
+                                            showSplitGoldCashDialog = true
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         // Inline Metal/Multi-Payment Configuration Card
@@ -1165,29 +1174,7 @@ fun CreateBillScreen(
                                 fontSize = 13.sp,
                                 color = GoldDark
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedButton(
-                                    onClick = { showSplitGoldCashDialog = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldDark)
-                                ) {
-                                    Text("⚡ " + loc(en = "Gold + Cash", gu = "સોનું + રોકડ"), fontSize = 11.sp, color = GoldDark, fontWeight = FontWeight.Bold)
-                                }
-                                Button(
-                                    onClick = {
-                                        editingPaymentIndex = null
-                                        showAddPaymentDialog = true
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = GoldDark),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text(AppStrings.addPaymentEntry(), fontSize = 11.sp)
-                                }
-                            }
+                            Spacer(modifier = Modifier.width(1.dp))
                         }
 
                         if (payments.isNotEmpty()) {
