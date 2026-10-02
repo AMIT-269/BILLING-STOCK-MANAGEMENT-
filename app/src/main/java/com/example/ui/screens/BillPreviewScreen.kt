@@ -614,7 +614,7 @@ fun BillPreviewScreen(
                                     .border(1.dp, Color(0xFF94A3B8))
                                     .horizontalScroll(hScrollState)
                             ) {
-                                Column(modifier = Modifier.width(820.dp)) {
+                                Column(modifier = Modifier.width(920.dp)) {
                                     val goldOnly = items.isNotEmpty() && items.all { it.metalType.equals("GOLD", ignoreCase = true) }
                                     val karigarGold = bill.billType == "KARIGAR_PURCHASE" && goldOnly
                                     val silverOnly = items.isNotEmpty() && items.all { it.metalType.equals("SILVER", ignoreCase = true) }
@@ -636,6 +636,7 @@ fun BillPreviewScreen(
                                             TableCell("Net Wt", 75.dp, isHeader = true, align = TextAlign.End)
                                             TableCell("Fine Gold", 85.dp, isHeader = true, align = TextAlign.End)
                                             TableCell("Gold Rate", 85.dp, isHeader = true, align = TextAlign.End)
+                                            TableCell("Other Charges", 100.dp, isHeader = true, align = TextAlign.End)
                                             TableCell("Amount", 90.dp, isHeader = true, align = TextAlign.End)
                                         } else if (silverOnly) {
                                             TableCell("Gross Weight", 75.dp, isHeader = true, align = TextAlign.Start)
@@ -694,6 +695,7 @@ fun BillPreviewScreen(
                                                 TableCell(LanguageManager.formatDouble(item.netWeight, 3), 75.dp, align = TextAlign.End)
                                                 TableCell("${LanguageManager.formatDouble(item.totalFine, 3)}g", 85.dp, isBold = true, align = TextAlign.End)
                                                 TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/g", 85.dp, align = TextAlign.End)
+                                                TableCell(LanguageManager.formatCurrency(if (index == items.lastIndex) bill.otherCharges else 0.0), 100.dp, align = TextAlign.End)
                                                 TableCell(amountFormatted, 90.dp, isBold = true, align = TextAlign.End)
                                             } else if (silverOnly) {
                                                 TableCell(LanguageManager.formatDouble(item.grossWeight, 3), 75.dp, isBold = true, align = TextAlign.Start)
@@ -701,8 +703,7 @@ fun BillPreviewScreen(
                                                 TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg", 80.dp, align = TextAlign.Start)
                                                 TableCell(LanguageManager.formatDouble(item.netWeight * (item.ratePerGram / 1000.0), 2), 90.dp, align = TextAlign.Start)
                                                 TableCell(LanguageManager.formatDouble((item.netWeight * (item.ratePerGram / 1000.0) * item.makingChargePercent / 100.0) + item.makingCharges, 2), 90.dp, align = TextAlign.Start)
-                                                val rowOtherCharges = if (index == items.lastIndex) bill.otherCharges else 0.0
-                                                TableCell(LanguageManager.formatCurrency(rowOtherCharges), 100.dp, align = TextAlign.Start)
+                                                TableCell(LanguageManager.formatCurrency(if (index == items.lastIndex) bill.otherCharges else 0.0), 100.dp, align = TextAlign.Start)
                                                 TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                             } else {
                                                 if (goldOnly) {
@@ -711,8 +712,7 @@ fun BillPreviewScreen(
                                                     TableCell("₹${LanguageManager.formatDouble(item.ratePerGram, 0)}", 80.dp, align = TextAlign.End)
                                                     TableCell(LanguageManager.formatDouble(item.netWeight * item.ratePerGram, 2), 90.dp, align = TextAlign.Start)
                                                     TableCell("₹" + LanguageManager.formatDouble(if (item.makingCharges > 0) item.makingCharges else (item.netWeight * item.ratePerGram * item.makingChargePercent / 100.0), 2), 90.dp, align = TextAlign.Start)
-                                                    val rowOtherCharges = if (index == items.lastIndex) bill.otherCharges else 0.0
-                                                    TableCell(LanguageManager.formatCurrency(rowOtherCharges), 100.dp, align = TextAlign.Start)
+                                                    TableCell(LanguageManager.formatCurrency(if (index == items.lastIndex) bill.otherCharges else 0.0), 100.dp, align = TextAlign.Start)
                                                     TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.Start)
                                                 } else {
                                                     TableCell(item.description, 75.dp, align = TextAlign.Start)
