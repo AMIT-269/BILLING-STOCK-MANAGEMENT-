@@ -743,9 +743,53 @@ fun CreateBillScreen(
                                     }
                                 }
 
+                                // Quick charge options. Selecting an option creates a separate
+                                // line with its own amount box; the total below is recalculated live.
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf("HUID RING", "HUID TOPS", "RHODIUM").forEach { preset ->
+                                        FilterChip(
+                                            selected = otherChargeEntries.any { it.name.equals(preset, ignoreCase = true) },
+                                            onClick = {
+                                                val existingIndex = otherChargeEntries.indexOfFirst {
+                                                    it.name.equals(preset, ignoreCase = true)
+                                                }
+                                                if (existingIndex < 0) {
+                                                    otherChargeEntries.add(OtherChargeEntry(name = preset))
+                                                }
+                                            },
+                                            label = { Text(preset, fontSize = 9.sp) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf("AD", "MOTI").forEach { preset ->
+                                        FilterChip(
+                                            selected = otherChargeEntries.any { it.name.equals(preset, ignoreCase = true) },
+                                            onClick = {
+                                                val existingIndex = otherChargeEntries.indexOfFirst {
+                                                    it.name.equals(preset, ignoreCase = true)
+                                                }
+                                                if (existingIndex < 0) {
+                                                    otherChargeEntries.add(OtherChargeEntry(name = preset))
+                                                }
+                                            },
+                                            label = { Text(preset, fontSize = 9.sp) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+
                                 if (otherChargeEntries.isEmpty()) {
                                     Text(
-                                        text = "Rhodium / HUID / AD / Moti etc.",
+                                        text = "Select HUID RING / HUID TOPS / RHODIUM or tap Add for another charge.",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -786,20 +830,18 @@ fun CreateBillScreen(
                                     }
                                 }
 
-                                if (otherCharges > 0.0) {
-                                    Divider()
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("Other Charges Total", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        Text(
-                                            LanguageManager.formatCurrency(otherCharges),
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 14.sp,
-                                            color = GoldDark
-                                        )
-                                    }
+                                Divider()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Other Charges Total", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(
+                                        LanguageManager.formatCurrency(otherCharges),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 14.sp,
+                                        color = GoldDark
+                                    )
                                 }
                             }
                         }
@@ -1337,7 +1379,9 @@ fun CreateBillScreen(
                             cashReceivedOrPaid = cashReceivedOrPaid,
                             oldMetalExchangeAmount = oldMetal,
                             otherCharges = otherCharges,
-                            otherChargesRemark = otherChargeEntries.filter { it.name.isNotBlank() }.joinToString("\n") { "${it.name.trim()}|${it.amount.trim()}" },
+                            otherChargesRemark = otherChargeEntries
+                                .filter { it.name.isNotBlank() || it.amount.toDoubleOrNull()?.let { amount -> amount != 0.0 } == true }
+                                .joinToString("\n") { "${it.name.trim()}|${it.amount.trim()}" },
                             netBalanceDue = netBalanceDue,
                             notes = notes.trim(),
                             createdAt = if (isEditMode) existingBillCreatedAt else System.currentTimeMillis(),
