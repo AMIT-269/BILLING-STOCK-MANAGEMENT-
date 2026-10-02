@@ -32,6 +32,7 @@ data class Bill(
     val grandTotal: Double = 0.0,
     val cashReceivedOrPaid: Double = 0.0,
     val oldMetalExchangeAmount: Double = 0.0,
+    val otherCharges: Double = 0.0,
     val netBalanceDue: Double = 0.0,
     val notes: String = "",
     val paymentsJson: String = "[]",
