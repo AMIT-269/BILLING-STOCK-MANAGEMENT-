@@ -722,6 +722,7 @@ fun BillPreviewScreen(
                                                     TableCell(totalTouchFormatted, 90.dp, align = TextAlign.End)
                                                     TableCell(totalFineFormatted, 85.dp, isBold = true, align = TextAlign.End)
                                                     TableCell(priceFormatted, 90.dp, align = TextAlign.End)
+                                                    TableCell(LanguageManager.formatCurrency(if (index == items.lastIndex) bill.otherCharges else 0.0), 100.dp, align = TextAlign.End)
                                                     TableCell(amountFormatted, 100.dp, isBold = true, align = TextAlign.End)
                                                 }
                                             }
