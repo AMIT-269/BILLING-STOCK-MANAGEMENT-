@@ -181,7 +181,10 @@ fun CreateBillScreen(
     }
 
     // Calculations
-    val subtotal = items.sumOf { it.itemTotal }
+    val itemsSubtotal = items.sumOf { it.itemTotal }
+    val otherCharges = otherChargeEntries.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+    // Other Charges are included in Subtotal so they are not added again to Grand Total.
+    val subtotal = itemsSubtotal + otherCharges
 
     val sgstRate = if (isGstBill) (sgstPercentText.toDoubleOrNull() ?: 1.5) else 0.0
     val cgstRate = if (isGstBill) (cgstPercentText.toDoubleOrNull() ?: 1.5) else 0.0
