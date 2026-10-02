@@ -763,7 +763,7 @@ fun CreateBillScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
                                     listOf("HUID RING", "HUID TOPS", "RHODIUM", "AD", "MOTI").forEach { preset ->
