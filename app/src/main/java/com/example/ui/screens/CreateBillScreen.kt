@@ -1706,8 +1706,8 @@ fun ItemEditDialog(
                     if (metalType == "SILVER") OutlinedTextField(
                         value = makingRupeesText,
                         onValueChange = { makingRupeesText = it },
-                        label = { Text(if (makingRupeeMode == "PER_GRAM") loc(en = "Making (₹/g)", gu = "મજૂરી (₹/ગ્રા)") else loc(en = "Making (₹ Flat)", gu = "મજૂરી (₹ ફિક્સ)")) },
-                        placeholder = { Text(if (makingRupeeMode == "PER_GRAM") "e.g. 100" else "e.g. 500") },
+                        label = { Text(loc(en = "Making (₹/g)", gu = "મજૂરી (₹/ગ્રા)")) },
+                        placeholder = { Text("e.g. 100") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f).testTag("dialog_item_making_rs"),
                         singleLine = true
