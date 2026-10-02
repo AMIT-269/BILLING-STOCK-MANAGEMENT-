@@ -91,6 +91,7 @@ fun CreateBillScreen(
 
     var showAddPaymentDialog by remember { mutableStateOf(false) }
     var showPaymentOptionsMenu by remember { mutableStateOf(false) }
+    var splitPaymentMetalMode by remember { mutableStateOf("GOLD") }
     var showSplitGoldCashDialog by remember { mutableStateOf(false) }
     var editingPaymentIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -273,6 +274,7 @@ fun CreateBillScreen(
             billType = billType,
             defaultGoldRate = defaultRate,
             defaultSilverRate = defaultSilRate,
+            initialMetalMode = splitPaymentMetalMode,
             isGu = isGu,
             onDismiss = { showSplitGoldCashDialog = false },
             onConfirm = { pMetal, pCash ->
@@ -958,6 +960,7 @@ fun CreateBillScreen(
                                         text = { Text(loc(en = "Gold + Cash", gu = "સોનું + રોકડ"), fontWeight = FontWeight.Bold) },
                                         onClick = {
                                             showPaymentOptionsMenu = false
+                                            splitPaymentMetalMode = "GOLD"
                                             showSplitGoldCashDialog = true
                                         }
                                     )
@@ -965,6 +968,7 @@ fun CreateBillScreen(
                                         text = { Text(loc(en = "Silver + Cash", gu = "ચાંદી + રોકડ"), fontWeight = FontWeight.Bold) },
                                         onClick = {
                                             showPaymentOptionsMenu = false
+                                            splitPaymentMetalMode = "SILVER"
                                             showSplitGoldCashDialog = true
                                         }
                                     )
