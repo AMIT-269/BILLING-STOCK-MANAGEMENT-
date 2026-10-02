@@ -71,6 +71,7 @@ fun CreateBillScreen(
     var discountText by remember { mutableStateOf("0") }
     var oldMetalExchangeText by remember { mutableStateOf("0") }
     var otherChargesText by remember { mutableStateOf("") }
+    var otherChargesRemarkText by remember { mutableStateOf("") }
     var cashReceivedOrPaidText by remember { mutableStateOf("0") }
 
     val items = remember { mutableStateListOf<BillItem>() }
@@ -121,6 +122,7 @@ fun CreateBillScreen(
                 discountText = if (b.discount > 0) LanguageManager.formatDouble(b.discount, 0) else "0"
                 oldMetalExchangeText = if (b.oldMetalExchangeAmount > 0) LanguageManager.formatDouble(b.oldMetalExchangeAmount, 0) else "0"
                 otherChargesText = if (b.otherCharges > 0) LanguageManager.formatDouble(b.otherCharges, 0) else ""
+                otherChargesRemarkText = b.otherChargesRemark
                 cashReceivedOrPaidText = if (b.cashReceivedOrPaid > 0) LanguageManager.formatDouble(b.cashReceivedOrPaid, 0) else "0"
                 existingBillCreatedAt = b.createdAt
                 existingBillDateTimestamp = b.dateTimestamp
@@ -719,15 +721,33 @@ fun CreateBillScreen(
                             )
                         }
 
-                        OutlinedTextField(
-                            value = otherChargesText,
-                            onValueChange = { otherChargesText = it },
-                            label = { Text("Other Charges") },
-                            placeholder = { Text("Rhodium / HUID / AD / Moti etc.") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.fillMaxWidth().testTag("bill_other_charges_input"),
-                            singleLine = true
-                        )
+                        Card(
+                            modifier = Modifier.fillMaxWidth().testTag("other_charges_box"),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(text = "Other Charges", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = GoldDark)
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedTextField(
+                                        value = otherChargesRemarkText,
+                                        onValueChange = { otherChargesRemarkText = it },
+                                        label = { Text("Remark") },
+                                        placeholder = { Text("Rhodium / HUID / AD / Moti etc.") },
+                                        modifier = Modifier.weight(1.4f).testTag("bill_other_charges_remark"),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = otherChargesText,
+                                        onValueChange = { otherChargesText = it },
+                                        label = { Text("Amount") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(0.8f).testTag("bill_other_charges_input"),
+                                        singleLine = true
+                                    )
+                                }
+                            }
+                        }
 
                         Divider(modifier = Modifier.padding(vertical = 10.dp))
 
