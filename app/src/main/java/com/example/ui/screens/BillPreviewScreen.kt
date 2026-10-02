@@ -1221,8 +1221,6 @@ fun BillPreviewScreen(
     }
 }
 
-}
-
 @Composable
 private fun TableCell(
     text: String,
