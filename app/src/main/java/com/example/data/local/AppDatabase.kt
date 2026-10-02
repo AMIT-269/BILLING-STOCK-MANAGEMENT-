@@ -18,7 +18,7 @@ import com.example.data.model.StockTransaction
         Bill::class,
         StockTransaction::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -105,6 +105,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                try { database.execSQL("ALTER TABLE bills ADD COLUMN otherCharges REAL NOT NULL DEFAULT 0.0") } catch (_: Exception) {}
+            }
+        }
+
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 ensureGstColumn(database)
@@ -154,6 +160,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
+                        MIGRATION_7_8,
                         MIGRATION_1_6,
                         MIGRATION_2_6,
                         MIGRATION_3_6,
