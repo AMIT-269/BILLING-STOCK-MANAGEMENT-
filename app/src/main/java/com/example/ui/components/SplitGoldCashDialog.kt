@@ -30,11 +30,12 @@ fun SplitGoldCashDialog(
     billType: String = "SALE",
     defaultGoldRate: Double = 0.0,
     defaultSilverRate: Double = 0.0,
+    initialMetalMode: String = "GOLD",
     isGu: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (metalPayment: BillPayment, cashPayment: BillPayment) -> Unit
 ) {
-    var metalMode by remember { mutableStateOf("GOLD") } // "GOLD" or "SILVER"
+    var metalMode by remember { mutableStateOf(initialMetalMode.uppercase().let { if (it == "SILVER") "SILVER" else "GOLD" }) } // "GOLD" or "SILVER"
     var metalWeightText by remember { mutableStateOf("") }
     var metalTouchText by remember { mutableStateOf(if (metalMode == "GOLD") "80.0" else "100.0") }
     var metalRateText by remember {
