@@ -466,6 +466,7 @@ object BluetoothPrinterHelper {
         val items = bill.parseItems()
         val goldOnly = items.isNotEmpty() && items.all { it.metalType.equals("GOLD", ignoreCase = true) }
         val karigarGold = bill.billType == "KARIGAR_PURCHASE" && goldOnly
+        val silverOnly = items.isNotEmpty() && items.all { it.metalType.equals("SILVER", ignoreCase = true) }
         for (item in items) {
             if (karigarGold) {
                 val metalPurity = if (item.purity.isNotBlank()) "Gold / ${item.purity}" else "Gold"
@@ -475,6 +476,13 @@ object BluetoothPrinterHelper {
                 writeLine(String.format(Locale.US, "  Labour: %.1f%% | Gross: %.3fg | Net: %.3fg", item.makingChargePercent, item.grossWeight, item.netWeight))
                 writeLine(String.format(Locale.US, "  Fine Gold: %.3fg | Gold Rate: Rs. %.0f/g", item.totalFine, item.ratePerGram))
                 writeLine(String.format(Locale.US, "  Amount: Rs. %.2f", item.itemTotal))
+            } else if (silverOnly) {
+                val silverPrice = item.netWeight * (item.ratePerGram / 1000.0)
+                val labour = silverPrice * item.makingChargePercent / 100.0 + item.makingCharges
+                writeLine(String.format(Locale.US, "%d | %s | Silver", items.indexOf(item) + 1, item.description.take(14)))
+                writeLine(String.format(Locale.US, "  Gross: %.3fg | Net: %.3fg | Rate: Rs. %.0f/kg", item.grossWeight, item.netWeight, item.ratePerGram))
+                writeLine(String.format(Locale.US, "  Silver Price: Rs. %.2f | Labour: Rs. %.2f", silverPrice, labour))
+                writeLine(String.format(Locale.US, "  Total Amount: Rs. %.2f", item.itemTotal))
             } else if (goldOnly) {
                 val metalPurity = if (item.purity.isNotBlank()) "Gold / ${item.purity}" else "Gold"
                 val goldAmount = item.netWeight * item.ratePerGram
@@ -511,6 +519,9 @@ object BluetoothPrinterHelper {
 
         if (bill.oldMetalExchangeAmount > 0) {
             writeLine(String.format(Locale.US, "Old Gold Exch: Rs. -%.2f", bill.oldMetalExchangeAmount))
+        }
+        if (bill.otherCharges > 0) {
+            writeLine(String.format(Locale.US, "Other Charges: Rs. +%.2f", bill.otherCharges))
         }
 
         write(ESC_BOLD_ON)
