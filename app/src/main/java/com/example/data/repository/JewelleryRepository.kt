@@ -1604,9 +1604,12 @@ class JewelleryRepository(private val context: Context) {
     ): Result<JewellerAccount> {
         val ciDiagnostic = System.getProperty("billing.skipFirebaseNetworkTests") == "true"
         if (ciDiagnostic) {
-            return updateAccountIdentityAndProfileInternal(
+            println("2B3-I0: identity wrapper entered")
+            val result = updateAccountIdentityAndProfileInternal(
                 jewellerName, mobileNumber, gstNumber, newCode4Digit
             )
+            println("2B3-I9: identity internal returned")
+            return result
         }
         return withContext(Dispatchers.IO) {
             updateAccountIdentityAndProfileInternal(
@@ -1621,11 +1624,18 @@ class JewelleryRepository(private val context: Context) {
         gstNumber: String,
         newCode4Digit: String?
     ): Result<JewellerAccount> {
+        val ciDiagnostic = System.getProperty("billing.skipFirebaseNetworkTests") == "true"
+        if (ciDiagnostic) println("2B3-I0A: identity internal entered")
         val current = _currentAccount.value ?: return Result.failure(Exception("No account is currently logged in."))
+        if (ciDiagnostic) println("2B3-I0B: current account read complete")
         val cleanName = normalizeText(jewellerName).ifBlank { current.jewellerName }
+        if (ciDiagnostic) println("2B3-I0C: name normalized")
         val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
+        if (ciDiagnostic) println("2B3-I0D: mobile normalized")
         val cleanGst = PhoneUtil.normalizeGst(gstNumber)
+        if (ciDiagnostic) println("2B3-I0E: gst normalized")
         val cleanCode = PhoneUtil.normalizeCode(newCode4Digit ?: current.code4Digit)
+        if (ciDiagnostic) println("2B3-I0F: code normalized")
 
         if (cleanMobile.length != 10 || cleanMobile.all { it == '0' }) {
             return Result.failure(Exception(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")))
