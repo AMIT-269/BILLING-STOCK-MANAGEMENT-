@@ -68,6 +68,7 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
     val mobile = uniqueTestMobile()
+    val gstNumber = uniqueTestGst()
 
     // 1. Invalid licence code during registration must fail
     val invalidLicenceRes = repo.registerNewJeweller(
@@ -76,7 +77,7 @@ class ExampleRobolectricTest {
       code = "1234",
       confirmCode = "1234",
       licenceCode = "9999",
-      gstNumber = "24AAAAA0000A1Z5"
+      gstNumber = gstNumber
     )
     assertTrue(invalidLicenceRes is AuthResult.Error)
     val msg1 = (invalidLicenceRes as AuthResult.Error).message
@@ -89,14 +90,14 @@ class ExampleRobolectricTest {
       code = "1234",
       confirmCode = "1234",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = "24AAAAA0000A1Z5"
+      gstNumber = gstNumber
     )
     assertTrue(regSuccess is AuthResult.Success)
 
     // 3. Login with correct credentials must succeed (Licence code 2330 NOT needed!)
     val loginSuccess = repo.login(
       mobile = mobile,
-      gstNumber = "24AAAAA0000A1Z5",
+      gstNumber = gstNumber,
       code = "1234"
     )
     assertTrue(loginSuccess is AuthResult.Success)
@@ -105,7 +106,7 @@ class ExampleRobolectricTest {
     // 4. Incorrect 4-digit code must return exact message "4 Digit Code ખોટો છે."
     val wrongCodeLogin = repo.login(
       mobile = mobile,
-      gstNumber = "24AAAAA0000A1Z5",
+      gstNumber = gstNumber,
       code = "9999"
     )
     assertTrue(wrongCodeLogin is AuthResult.Error)
@@ -125,7 +126,7 @@ class ExampleRobolectricTest {
     // 6. Wrong Mobile with existing GST must return error
     val wrongMobileLogin = repo.login(
       mobile = "9123456780",
-      gstNumber = "24AAAAA0000A1Z5",
+      gstNumber = gstNumber,
       code = "1234"
     )
     assertTrue(wrongMobileLogin is AuthResult.Error)
@@ -145,7 +146,7 @@ class ExampleRobolectricTest {
     // 8. Forgot Password can reset code without licence code
     val resetRes = repo.resetPassword(
       mobile = mobile,
-      gstNumber = "24AAAAA0000A1Z5",
+      gstNumber = gstNumber,
       newCode = "5678",
       confirmCode = "5678"
     )
@@ -154,7 +155,7 @@ class ExampleRobolectricTest {
     // 9. Login with new code succeeds
     val loginWithNewCode = repo.login(
       mobile = mobile,
-      gstNumber = "24AAAAA0000A1Z5",
+      gstNumber = gstNumber,
       code = "5678"
     )
     assertTrue(loginWithNewCode is AuthResult.Success)
@@ -166,7 +167,7 @@ class ExampleRobolectricTest {
     val repo = JewelleryRepository(context)
     val mobile = uniqueTestMobile()
 
-    val gstNumber = "24AAAAA0000A1Z5"
+    val gstNumber = uniqueTestGst()
 
     // Register with GST
     val regRes = repo.registerNewJeweller(
@@ -284,7 +285,7 @@ class ExampleRobolectricTest {
       code = "1122",
       confirmCode = "1122",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = "24AMITJ1234F1Z5"
+      gstNumber = uniqueTestGst()
     )
     assertTrue(regRes is AuthResult.Success)
     val accountId = (regRes as AuthResult.Success).account.accountId
@@ -330,7 +331,7 @@ class ExampleRobolectricTest {
     val shopName = "Mahalaxmi Jewellers"
     val mobile = uniqueTestMobile()
     val code = "5566"
-    val gst = "24ABCDE1234F1Z5"
+    val gst = uniqueTestGst()
 
     // Step 1: Register a new account
     val regRes = repo1.registerNewJeweller(
@@ -394,7 +395,7 @@ class ExampleRobolectricTest {
     val shopName = "Ambica Jewellers"
     val mobile = uniqueTestMobile()
     val code = "1234"
-    val gst = "24AABCA1234A1Z5"
+    val gst = uniqueTestGst()
 
     // Initial Registration
     val regRes = repo.registerNewJeweller(
@@ -522,7 +523,7 @@ class ExampleRobolectricTest {
       code = "3344",
       confirmCode = "3344",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = "24SARDAR1234F1Z5"
+      gstNumber = uniqueTestGst()
     )
     assertTrue(regRes is AuthResult.Success)
     val accountId = (regRes as AuthResult.Success).account.accountId
@@ -585,8 +586,8 @@ class ExampleRobolectricTest {
     val repo = JewelleryRepository(context)
 
     val mobile = uniqueTestMobile()
-    val gstA = "24AAAAA1111A1Z1"
-    val gstB = "24BBBBB2222B2Z2"
+    val gstA = uniqueTestGst()
+    val gstB = uniqueTestGst()
 
     // Register Account A
     val regA = repo.registerNewJeweller(
@@ -641,7 +642,7 @@ class ExampleRobolectricTest {
     val repo = JewelleryRepository(context)
 
     val mobile = uniqueTestMobile()
-    val gst = "24CCCCC3333C3Z3"
+    val gst = uniqueTestGst()
 
     val reg = repo.registerNewJeweller(
       name = "Test Security Shop",
@@ -679,7 +680,7 @@ class ExampleRobolectricTest {
       code = "1234",
       confirmCode = "1234",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = "24DDDDD4444D4Z4"
+      gstNumber = uniqueTestGst()
     )
     assertTrue(reg1 is AuthResult.Success)
     val acc1 = (reg1 as AuthResult.Success).account
@@ -691,7 +692,7 @@ class ExampleRobolectricTest {
       code = "5678",
       confirmCode = "5678",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = "24EEEEE5555E5Z5"
+      gstNumber = uniqueTestGst()
     )
     assertTrue(reg2 is AuthResult.Success)
     val acc2 = (reg2 as AuthResult.Success).account
