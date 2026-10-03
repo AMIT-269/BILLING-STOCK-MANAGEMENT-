@@ -31,8 +31,13 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Build Debug APK
-        run: gradle testDebugUnitTest assembleDebug --no-daemon
+      # Keep tests and APK compilation as separate steps so a stuck test/build
+      # is visible immediately instead of looking like one generic Build step.
+      - name: Run Unit Tests
+        run: timeout 8m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain
+
+      - name: Assemble Debug APK
+        run: timeout 6m gradle assembleDebug --no-daemon --stacktrace --console=plain
 
       - name: Upload APK
         uses: actions/upload-artifact@v5
