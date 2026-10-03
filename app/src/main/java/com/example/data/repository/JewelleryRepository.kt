@@ -1694,14 +1694,14 @@ class JewelleryRepository(private val context: Context) {
             try {
             val cloudMobile = if (cleanMobile != oldMobile) cloudSync.findAccountByMobileInCloud(cleanMobile) else null
             if (cloudMobile != null && cloudMobile.accountId != current.accountId) {
-                return Result.failure(Exception(loc(
+                return Result.failure<JewellerAccount>(Exception(loc(
                     "This Mobile Number is already registered to another account.",
                     "આ Mobile Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )))
             }
             val cloudGst = if (cleanGst != oldGst) cloudSync.findAccountByGstInCloud(cleanGst) else null
             if (cloudGst != null && cloudGst.accountId != current.accountId) {
-                return Result.failure(Exception(loc(
+                return Result.failure<JewellerAccount>(Exception(loc(
                     "This GST Number is already registered to another account.",
                     "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )))
@@ -1799,7 +1799,7 @@ class JewelleryRepository(private val context: Context) {
             return Result.success(updated)
         } catch (e: Exception) {
             Log.e("JewelleryRepository", "updateAccountIdentityAndProfile failed", e)
-            Result.failure(e)
+            return Result.failure<JewellerAccount>(e)
         }
     }
 
