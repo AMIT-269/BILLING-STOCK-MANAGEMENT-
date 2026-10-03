@@ -1662,8 +1662,9 @@ class JewelleryRepository(private val context: Context) {
             return@withContext Result.failure(Exception(message))
         }
 
-        // Also check current Firestore indexes when the value is actually changing.
-        try {
+        // Firestore identity checks are skipped in CI/Robolectric because Firebase network is disabled there. Local persistence checks above still enforce uniqueness.
+        if (System.getProperty("billing.skipFirebaseNetworkTests") != "true") {
+            try {
             val cloudMobile = if (cleanMobile != oldMobile) cloudSync.findAccountByMobileInCloud(cleanMobile) else null
             if (cloudMobile != null && cloudMobile.accountId != current.accountId) {
                 return@withContext Result.failure(Exception(loc(
@@ -1678,8 +1679,9 @@ class JewelleryRepository(private val context: Context) {
                     "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )))
             }
-        } catch (e: Exception) {
-            Log.w("JewelleryRepository", "Cloud identity conflict check skipped: ${e.message}")
+            } catch (e: Exception) {
+                Log.w("JewelleryRepository", "Cloud identity conflict check skipped: ${e.message}")
+            }
         }
 
         val updated = current.copy(
