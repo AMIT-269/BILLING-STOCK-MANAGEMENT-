@@ -378,6 +378,10 @@ class CloudSyncManager private constructor(private val context: Context) {
         timeoutMs: Long = 8000L,
         block: suspend () -> T
     ): FirestoreCallResult<T> {
+        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") {
+            Log.i(TAG, "Firestore call skipped in unit-test environment")
+            return FirestoreCallResult.Error("Unit-test Firebase network disabled")
+        }
         val netAvailable = isNetworkAvailable()
         if (!netAvailable) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable")
@@ -765,8 +769,9 @@ class CloudSyncManager private constructor(private val context: Context) {
             }
         } catch (_: Exception) {}
 
-        // 2. Query Firestore if network available
-        if (isNetworkAvailable()) {
+        // 2. Query Firestore only in the real app. Robolectric/CI tests must
+        // remain deterministic and use the local mirror + Room only.
+        if (System.getProperty("billing.skipFirebaseNetworkTests") != "true" && isNetworkAvailable()) {
             val fs = getFirestore()
             if (fs != null) {
                 try {
@@ -2378,6 +2383,7 @@ class CloudSyncManager private constructor(private val context: Context) {
      */
     fun triggerAutoSync(accountId: String) {
         if (accountId.isBlank()) return
+        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") return
         scope.launch {
             try {
                 performFullTwoWayAutoSync(accountId)
