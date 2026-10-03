@@ -777,58 +777,6 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `diagnostic account identity update C1 C2 C3 only`() = runBlocking {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    System.setProperty("billing.skipFirebaseNetworkTests", "true")
-    val repo = JewelleryRepository(context)
-    val oldMobile = uniqueTestMobile()
-    val newMobile = uniqueTestMobile()
-    val oldGst = uniqueTestGst()
-    val newGst = uniqueTestGst()
-
-    println("2B3-C1: before register")
-    val reg = repo.registerNewJeweller(
-      name = "Amit Jewellers",
-      mobile = oldMobile,
-      code = "1234",
-      confirmCode = "1234",
-      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = oldGst
-    )
-    assertTrue("Registration should succeed", reg is AuthResult.Success)
-    println("2B3-C2: register complete")
-
-    println("2B3-C3: before identity update")
-    val watchdog = Thread {
-      try {
-        Thread.sleep(5_000)
-        println("2B3-WATCHDOG: identity update still blocked after 5s")
-        Thread.getAllStackTraces().forEach { (thread, stack) ->
-          println("2B3-THREAD: ${thread.name} state=${thread.state}")
-          stack.take(20).forEach { frame -> println("    at $frame") }
-        }
-      } catch (_: InterruptedException) {
-        // Identity update completed before the diagnostic watchdog fired.
-      }
-    }.apply {
-      isDaemon = true
-      name = "2B3-identity-watchdog"
-      start()
-    }
-    val changed = try {
-      repo.updateAccountIdentityAndProfile(
-        jewellerName = "Amit Gold Jewellers",
-        mobileNumber = newMobile,
-        gstNumber = newGst
-      )
-    } finally {
-      watchdog.interrupt()
-    }
-    println("2B3-C4: identity update complete")
-    assertTrue("Identity change should succeed", changed.isSuccess)
-  }
-
-  @Test
   fun `verify changed account identity cannot login with old details and settings show new details`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
