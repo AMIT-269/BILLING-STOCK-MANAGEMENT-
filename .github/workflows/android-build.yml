@@ -30,22 +30,21 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Run Robolectric tests group 1
+      - name: Run Robolectric tests group 2
         run: >
           timeout 4m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.mobile normalization accepts exact 10 digits and common prefixes"
-          --tests "com.example.ExampleRobolectricTest.read string from context"
-          --tests "com.example.ExampleRobolectricTest.verify owner licence code validation"
-          --tests "com.example.ExampleRobolectricTest.verify registration login and granular error handling"
-          --tests "com.example.ExampleRobolectricTest.verify registration login forgot password with GST number and change code"
-          --tests "com.example.ExampleRobolectricTest.verify language manager digits stay 0-9 in all supported languages"
-          --tests "com.example.ExampleRobolectricTest.verify fine 100 percent calculation logic - 10g at 80 touch equals 8g fine"
-          --tests "com.example.ExampleRobolectricTest.verify customer sale and karigar purchase bill numbering with jeweller initials and sequential digits"
-          --tests "com.example.ExampleRobolectricTest.verify exact silver sale and payment kg calculation example"
-          --tests "com.example.ExampleRobolectricTest.verify persistent registration and login protocol across app closure and time delay"
-          --tests "com.example.ExampleRobolectricTest.verify repeated logout and login cycles survive continuously"
-          --tests "com.example.ExampleRobolectricTest.verify multi-payment bill preserves fine metal and cash breakdown in bill text and json"
+          --tests "com.example.ExampleRobolectricTest.verify bill update does not duplicate bill or stock records"
+          --tests "com.example.ExampleRobolectricTest.verify two accounts with same mobile and different GST enforce GST on login and authenticate separately"
+          --tests "com.example.ExampleRobolectricTest.verify wrong 4-digit code does not trigger mobile not registered"
+          --tests "com.example.ExampleRobolectricTest.verify same jeweller name with different mobile and GST creates separate accounts and preserves bills across sessions"
+          --tests "com.example.ExampleRobolectricTest.verify duplicate GST with different mobile cannot create second account"
+          --tests "com.example.ExampleRobolectricTest.verify changed dummy identity cannot login with old details and settings show new details"
+          --tests "com.example.ExampleRobolectricTest.verify network and timeout errors during login never show mobile not registered"
+          --tests "com.example.ExampleRobolectricTest.verify online unregistered mobile shows clear registration error message"
+          --tests "com.example.ExampleRobolectricTest.verify silver payment rate is kg based and never multiplied by 1000"
+          --tests "com.example.ExampleRobolectricTest.verify inline silver payment uses kg rate exactly once"
+          --tests "com.example.ExampleRobolectricTest.normalize legacy Silver payment amount stored with wrong kg unit"
 
       - name: Assemble Debug APK
         if: success()
