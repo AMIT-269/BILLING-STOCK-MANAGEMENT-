@@ -691,6 +691,24 @@ class JewelleryRepository(private val context: Context) {
             )
         }
 
+        // GST Number is also a globally unique registration identity.
+        // A second account must never be created with the same GST and a different Mobile.
+        val existingGstAccount = allAccounts.firstOrNull {
+            PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+        } ?: try {
+            cloudSync.findAccountByGstInCloud(cleanGst)
+        } catch (_: Exception) {
+            null
+        }
+        if (existingGstAccount != null) {
+            return@withContext AuthResult.Error(
+                loc(
+                    "This GST Number is already registered. Please use a different GST Number or login to the existing account.",
+                    "આ GST Number પહેલેથી રજીસ્ટર છે. અલગ GST Number વાપરો અથવા હાલના accountમાં login કરો."
+                )
+            )
+        }
+
         // Defensive exact identity lookup for stale indexes.
         val existingAccount = allAccounts.firstOrNull {
             PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
