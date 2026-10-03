@@ -1179,7 +1179,44 @@ class JewelleryRepository(private val context: Context) {
             }
 
             // ========================================================
-            // 3. VERIFY 4-DIGIT CODE
+            // 3. VERIFY CURRENT ACCOUNT IDENTITY
+            // ========================================================
+            // A stale old Mobile/GST index must never resurrect the dummy identity
+            // after the customer has changed the account in Settings.
+            try {
+                val authoritative = sequenceOf(
+                    try { accountDao.getAccountById(matchedAccount.accountId) } catch (_: Exception) { null },
+                    getPermanentAccountsList().firstOrNull { it.accountId == matchedAccount.accountId },
+                    accountMemoryCache.values.firstOrNull { it.accountId == matchedAccount.accountId },
+                    cloudSync.getLocalMirroredAccounts().firstOrNull { it.accountId == matchedAccount.accountId }
+                ).filterNotNull().maxByOrNull { it.createdAt }
+
+                if (authoritative != null) {
+                    val authoritativeMobile = PhoneUtil.normalizeMobile(authoritative.mobileNumber)
+                    val authoritativeGst = PhoneUtil.normalizeGst(authoritative.gstNumber)
+                    val identityMatches = authoritativeMobile == cleanMobile &&
+                        (cleanGst.isBlank() || authoritativeGst == cleanGst)
+
+                    if (!identityMatches) {
+                        Log.w(
+                            "JewelleryRepository",
+                            "LOGIN_LOOKUP: STALE_IDENTITY_REJECTED account=${matchedAccount.accountId}"
+                        )
+                        return@withContext AuthResult.Error(
+                            loc(
+                                "This Mobile Number or GST Number is no longer registered for this account. Please use the current Mobile Number and GST No.",
+                                "આ Mobile Number અથવા GST Number હવે આ account માટે રજીસ્ટર નથી. કૃપા કરીને હાલનો Mobile Number અને GST No. વાપરો."
+                            )
+                        )
+                    }
+                    matchedAccount = authoritative
+                }
+            } catch (e: Exception) {
+                Log.w("JewelleryRepository", "Authoritative identity check skipped: ${e.message}")
+            }
+
+            // ========================================================
+            // 4. VERIFY 4-DIGIT CODE
             // ========================================================
             val storedCode = PhoneUtil.normalizeCode(matchedAccount.code4Digit)
             if (storedCode.isNotEmpty() && cleanCode != storedCode) {
