@@ -380,7 +380,20 @@ class CloudSyncManager private constructor(private val context: Context) {
             Log.w(TAG, "LOGIN_LOOKUP: FIRESTORE_NETWORK_ERROR - Network unavailable")
             return FirestoreCallResult.NetworkError
         }
-        if (!ensureFirebaseAnonymousAuth()) {
+        // Never let Firebase anonymous-auth initialization block a build/login forever.
+        // Robolectric/unstable networks can report connectivity while Firebase auth is unavailable.
+        val authAvailable = try {
+            kotlinx.coroutines.withTimeout(timeoutMs.coerceAtMost(5000L)) {
+                ensureFirebaseAnonymousAuth()
+            }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_AUTH_TIMEOUT - Timeout before Firestore call")
+            false
+        } catch (e: Exception) {
+            Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_AUTH_ERROR - ${e.message}")
+            false
+        }
+        if (!authAvailable) {
             Log.w(TAG, "LOGIN_LOOKUP: FIREBASE_AUTH_ERROR - Anonymous Firebase authentication is unavailable")
             return FirestoreCallResult.Error("Firebase authentication unavailable")
         }
