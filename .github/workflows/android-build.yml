@@ -30,11 +30,11 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Run isolated 2B-3 C1-C3 diagnostic
+      - name: Run Robolectric test 2B-3 account identity
         run: >
           timeout 2m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.diagnostic account identity update C1 C2 C3 only"
+          --tests "com.example.ExampleRobolectricTest.verify changed account identity cannot login with old details and settings show new details"
 
       - name: Run Robolectric tests group 2C
         if: success()
@@ -65,4 +65,3 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-# Diagnostic: isolate first half of ExampleRobolectricTest after full class timed out.
