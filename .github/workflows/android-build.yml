@@ -32,7 +32,7 @@ jobs:
 
       - name: Run isolated 2B-3 C1-C3 diagnostic
         run: >
-          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          timeout 45s gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
           --tests "com.example.ExampleRobolectricTest.diagnostic account identity update C1 C2 C3 only"
 
