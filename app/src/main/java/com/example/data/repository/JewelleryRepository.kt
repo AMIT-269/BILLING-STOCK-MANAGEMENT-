@@ -31,7 +31,6 @@ import java.io.FileOutputStream
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.coroutines.coroutineContext
 import com.example.ui.locale.loc
 import com.example.ui.locale.LanguageManager
 
@@ -1602,30 +1601,47 @@ class JewelleryRepository(private val context: Context) {
         mobileNumber: String,
         gstNumber: String,
         newCode4Digit: String? = null
-    ): Result<JewellerAccount> = withContext(
-        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") coroutineContext else Dispatchers.IO
-    ) {
-        val current = _currentAccount.value ?: return@withContext Result.failure(Exception("No account is currently logged in."))
+    ): Result<JewellerAccount> {
+        val ciDiagnostic = System.getProperty("billing.skipFirebaseNetworkTests") == "true"
+        if (ciDiagnostic) {
+            return updateAccountIdentityAndProfileInternal(
+                jewellerName, mobileNumber, gstNumber, newCode4Digit
+            )
+        }
+        return withContext(Dispatchers.IO) {
+            updateAccountIdentityAndProfileInternal(
+                jewellerName, mobileNumber, gstNumber, newCode4Digit
+            )
+        }
+    }
+
+    private suspend fun updateAccountIdentityAndProfileInternal(
+        jewellerName: String,
+        mobileNumber: String,
+        gstNumber: String,
+        newCode4Digit: String?
+    ): Result<JewellerAccount> {
+        val current = _currentAccount.value ?: return Result.failure(Exception("No account is currently logged in."))
         val cleanName = normalizeText(jewellerName).ifBlank { current.jewellerName }
         val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
         val cleanGst = PhoneUtil.normalizeGst(gstNumber)
         val cleanCode = PhoneUtil.normalizeCode(newCode4Digit ?: current.code4Digit)
 
         if (cleanMobile.length != 10 || cleanMobile.all { it == '0' }) {
-            return@withContext Result.failure(Exception(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")))
+            return Result.failure(Exception(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")))
         }
         if (cleanGst.isEmpty()) {
-            return@withContext Result.failure(Exception(loc("Please enter GST Number.", "કૃપા કરીને GST નંબર દાખલ કરો.")))
+            return Result.failure(Exception(loc("Please enter GST Number.", "કૃપા કરીને GST નંબર દાખલ કરો.")))
         }
         if (cleanCode.length != 4) {
-            return@withContext Result.failure(Exception(loc("Please enter 4-digit code.", "કૃપા કરીને 4 અંકનો કોડ દાખલ કરો.")))
+            return Result.failure(Exception(loc("Please enter 4-digit code.", "કૃપા કરીને 4 અંકનો કોડ દાખલ કરો.")))
         }
 
         val identityChanged = cleanMobile != PhoneUtil.normalizeMobile(current.mobileNumber) ||
             cleanGst != PhoneUtil.normalizeGst(current.gstNumber) ||
             cleanName != current.jewellerName
         if (!identityChanged && cleanCode == PhoneUtil.normalizeCode(current.code4Digit)) {
-            return@withContext Result.success(current)
+            return Result.success(current)
         }
 
         val oldMobile = PhoneUtil.normalizeMobile(current.mobileNumber)
@@ -1670,7 +1686,7 @@ class JewelleryRepository(private val context: Context) {
                     "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )
             }
-            return@withContext Result.failure(Exception(message))
+            return Result.failure(Exception(message))
         }
 
         // Firestore identity checks are skipped in CI/Robolectric because Firebase network is disabled there. Local persistence checks above still enforce uniqueness.
@@ -1678,14 +1694,14 @@ class JewelleryRepository(private val context: Context) {
             try {
             val cloudMobile = if (cleanMobile != oldMobile) cloudSync.findAccountByMobileInCloud(cleanMobile) else null
             if (cloudMobile != null && cloudMobile.accountId != current.accountId) {
-                return@withContext Result.failure(Exception(loc(
+                return Result.failure(Exception(loc(
                     "This Mobile Number is already registered to another account.",
                     "આ Mobile Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )))
             }
             val cloudGst = if (cleanGst != oldGst) cloudSync.findAccountByGstInCloud(cleanGst) else null
             if (cloudGst != null && cloudGst.accountId != current.accountId) {
-                return@withContext Result.failure(Exception(loc(
+                return Result.failure(Exception(loc(
                     "This GST Number is already registered to another account.",
                     "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )))
