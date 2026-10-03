@@ -1580,15 +1580,61 @@ class JewelleryRepository(private val context: Context) {
             return@withContext Result.success(current)
         }
 
-        // Prevent changing into another existing account's exact identity.
-        val knownAccounts = try { accountDao.getAllAccounts() + getPermanentAccountsList() + cloudSync.getLocalMirroredAccounts() } catch (_: Exception) { emptyList() }
+        val oldMobile = PhoneUtil.normalizeMobile(current.mobileNumber)
+        val oldGst = PhoneUtil.normalizeGst(current.gstNumber)
+
+        // Both Mobile Number and GST Number are globally unique account identities.
+        // A customer may change both together, but neither value may belong to another account.
+        val knownAccounts = try {
+            accountDao.getAllAccounts() + getPermanentAccountsList() + cloudSync.getLocalMirroredAccounts()
+        } catch (_: Exception) {
+            emptyList()
+        }
         val conflict = knownAccounts.firstOrNull {
             it.accountId != current.accountId &&
-                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
-                PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+                (
+                    PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile ||
+                    PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+                )
         }
         if (conflict != null) {
-            return@withContext Result.failure(Exception(loc("This Mobile Number + GST Number already belongs to another account.", "આ Mobile Number + GST Number બીજા એકાઉન્ટ સાથે જોડાયેલ છે.")))
+            val sameMobile = PhoneUtil.normalizeMobile(conflict.mobileNumber) == cleanMobile
+            val sameGst = PhoneUtil.normalizeGst(conflict.gstNumber) == cleanGst
+            val message = when {
+                sameMobile && sameGst -> loc(
+                    "This Mobile Number and GST Number already belong to another account.",
+                    "આ Mobile Number અને GST Number બીજા એકાઉન્ટ સાથે જોડાયેલા છે."
+                )
+                sameMobile -> loc(
+                    "This Mobile Number is already registered to another account.",
+                    "આ Mobile Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
+                )
+                else -> loc(
+                    "This GST Number is already registered to another account.",
+                    "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
+                )
+            }
+            return@withContext Result.failure(Exception(message))
+        }
+
+        // Also check current Firestore indexes when the value is actually changing.
+        try {
+            val cloudMobile = if (cleanMobile != oldMobile) cloudSync.findAccountByMobileInCloud(cleanMobile) else null
+            if (cloudMobile != null && cloudMobile.accountId != current.accountId) {
+                return@withContext Result.failure(Exception(loc(
+                    "This Mobile Number is already registered to another account.",
+                    "આ Mobile Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
+                )))
+            }
+            val cloudGst = if (cleanGst != oldGst) cloudSync.findAccountByGstInCloud(cleanGst) else null
+            if (cloudGst != null && cloudGst.accountId != current.accountId) {
+                return@withContext Result.failure(Exception(loc(
+                    "This GST Number is already registered to another account.",
+                    "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
+                )))
+            }
+        } catch (e: Exception) {
+            Log.w("JewelleryRepository", "Cloud identity conflict check skipped: ${e.message}")
         }
 
         val updated = current.copy(
@@ -1597,9 +1643,6 @@ class JewelleryRepository(private val context: Context) {
             gstNumber = cleanGst,
             code4Digit = cleanCode
         )
-        val oldMobile = PhoneUtil.normalizeMobile(current.mobileNumber)
-        val oldGst = PhoneUtil.normalizeGst(current.gstNumber)
-
         try {
             // Replace the Room row and remove all old identity keys before writing the new identity.
             accountDao.insertAccount(updated)
