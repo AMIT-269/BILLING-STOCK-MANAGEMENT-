@@ -586,7 +586,9 @@ class ExampleRobolectricTest {
     val accountA = (regA as AuthResult.Success).account
     assertEquals("Shop Alpha", accountA.jewellerName)
 
-    // Register Account B with same mobile but different GST
+    // Registering Account B with the same mobile but a different GST must be rejected.
+    // Mobile number is the unique account identity; changing GST must never create
+    // a second account or split the same mobile across multiple accounts.
     val regB = repo.registerNewJeweller(
       name = "Shop Beta",
       mobile = mobile,
@@ -595,36 +597,27 @@ class ExampleRobolectricTest {
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
       gstNumber = gstB
     )
-    assertTrue("Registration B should succeed", regB is AuthResult.Success)
-    val accountB = (regB as AuthResult.Success).account
-    assertEquals("Shop Beta", accountB.jewellerName)
-    org.junit.Assert.assertNotEquals(accountA.accountId, accountB.accountId)
+    assertTrue("Registration B with duplicate mobile must fail", regB is AuthResult.Error)
+    val duplicateMobileMsg = (regB as AuthResult.Error).message
+    assertTrue(
+      "Duplicate-mobile error must mention mobile",
+      duplicateMobileMsg.contains("Mobile", ignoreCase = true) ||
+        duplicateMobileMsg.contains("મોબાઈલ", ignoreCase = true)
+    )
 
-    // Logout
     repo.logout()
 
-    // 1. Attempt login with mobile only: MUST require GST, never guess!
-    val mobileOnlyLogin = repo.login(mobile, "", "1111")
-    assertTrue("Mobile-only login must fail when multiple accounts exist", mobileOnlyLogin is AuthResult.Error)
-    val errorMsg = (mobileOnlyLogin as AuthResult.Error).message
-    assertTrue("Error message must mention GST requirement", errorMsg.contains("GST") || errorMsg.contains("જીએસટી"))
+    // Wrong GST must never authenticate the existing account.
+    val wrongGstLogin = repo.login(mobile, gstB, "1111")
+    assertTrue("Wrong GST must fail", wrongGstLogin is AuthResult.Error)
 
-    // 2. Login with Mobile + GST A
+    // Original Mobile + GST must still authenticate Account A.
     val loginA = repo.login(mobile, gstA, "1111")
-    assertTrue("Login A with Mobile + GST A should succeed", loginA is AuthResult.Success)
+    assertTrue("Login A with original GST should succeed", loginA is AuthResult.Success)
     val loggedInA = (loginA as AuthResult.Success).account
     assertEquals("Shop Alpha", loggedInA.jewellerName)
     assertEquals(gstA, loggedInA.gstNumber)
-
-    repo.logout()
-
-    // 3. Login with Mobile + GST B
-    val loginB = repo.login(mobile, gstB, "2222")
-    assertTrue("Login B with Mobile + GST B should succeed", loginB is AuthResult.Success)
-    val loggedInB = (loginB as AuthResult.Success).account
-    assertEquals("Shop Beta", loggedInB.jewellerName)
-    assertEquals(gstB, loggedInB.gstNumber)
-  }
+    assertEquals(accountA.accountId, loggedInA.accountId)
 
   @Test
   fun `verify wrong 4-digit code does not trigger mobile not registered`() = runBlocking {
