@@ -776,7 +776,38 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify changed dummy identity cannot login with old details and settings show new details`() = runBlocking {
+  fun `diagnostic account identity update C1 C2 C3 only`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+    val oldMobile = uniqueTestMobile()
+    val newMobile = uniqueTestMobile()
+    val oldGst = uniqueTestGst()
+    val newGst = uniqueTestGst()
+
+    println("2B3-C1: before register")
+    val reg = repo.registerNewJeweller(
+      name = "Amit Jewellers",
+      mobile = oldMobile,
+      code = "1234",
+      confirmCode = "1234",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = oldGst
+    )
+    assertTrue("Registration should succeed", reg is AuthResult.Success)
+    println("2B3-C2: register complete")
+
+    println("2B3-C3: before identity update")
+    val changed = repo.updateAccountIdentityAndProfile(
+      jewellerName = "Amit Gold Jewellers",
+      mobileNumber = newMobile,
+      gstNumber = newGst
+    )
+    println("2B3-C4: identity update complete")
+    assertTrue("Identity change should succeed", changed.isSuccess)
+  }
+
+  @Test
+  fun `verify changed account identity cannot login with old details and settings show new details`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
 
@@ -794,13 +825,13 @@ class ExampleRobolectricTest {
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
       gstNumber = oldGst
     )
-    assertTrue("Dummy registration should succeed", reg is AuthResult.Success)
+    assertTrue("Registration should succeed", reg is AuthResult.Success)
     println("2B3-C2: register complete")
     val accountId = (reg as AuthResult.Success).account.accountId
 
     println("2B3-C3: before identity update")
     val changed = repo.updateAccountIdentityAndProfile(
-      jewellerName = "Customer Real Shop",
+      jewellerName = "Amit Gold Jewellers",
       mobileNumber = newMobile,
       gstNumber = newGst
     )
@@ -828,7 +859,7 @@ class ExampleRobolectricTest {
 
     println("2B3-C9: before old login")
     val oldLogin = repo.login(oldMobile, oldGst, "1234")
-    assertTrue("Old dummy Mobile + GST must no longer login", oldLogin is AuthResult.Error)
+    assertTrue("Old Mobile + GST must no longer login", oldLogin is AuthResult.Error)
     println("2B3-C10: old login complete")
 
     println("2B3-C11: before new login")
@@ -838,7 +869,7 @@ class ExampleRobolectricTest {
 
     println("2B3-C13: before final settings read")
     val settingsAfterLogin = repo.getSettingsDirect(accountId)
-    assertEquals("Customer Real Shop", settingsAfterLogin?.jewellerName)
+    assertEquals("Amit Gold Jewellers", settingsAfterLogin?.jewellerName)
     assertEquals(newMobile, settingsAfterLogin?.contactNumber)
     assertEquals(newGst, settingsAfterLogin?.gstNumber)
     println("2B3-C14: test complete")
