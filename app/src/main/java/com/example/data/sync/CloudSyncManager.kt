@@ -305,6 +305,9 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     private fun getFirestoreInstance(): FirestoreInstanceResult {
+        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") {
+            return FirestoreInstanceResult.ConfigError("Firebase network disabled for unit tests")
+        }
         return try {
             val app = if (FirebaseApp.getApps(context).isEmpty()) {
                 val initialized = FirebaseApp.initializeApp(context)
