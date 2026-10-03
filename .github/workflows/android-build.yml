@@ -53,7 +53,6 @@ jobs:
           --tests "com.example.ExampleRobolectricTest.verify duplicate GST with different mobile cannot create second account"
 
       - name: Run Robolectric test 2B-3
-        if: success()
         run: >
           timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
