@@ -639,7 +639,7 @@ class JewelleryRepository(private val context: Context) {
                     .putString("last_gst_number", account.gstNumber)
                     .commit()
 
-                cloudSync.startPeriodicAutoSync(account.accountId)
+                if (System.getProperty("billing.skipFirebaseNetworkTests") != "true") {\n                    cloudSync.startPeriodicAutoSync(account.accountId)\n                }
             }
         }
     }
@@ -791,7 +791,7 @@ class JewelleryRepository(private val context: Context) {
                 .commit()
 
             _currentAccount.value = finalAccount
-            cloudSync.startPeriodicAutoSync(finalAccount.accountId)
+            if (System.getProperty("billing.skipFirebaseNetworkTests") != "true") {\n                cloudSync.startPeriodicAutoSync(finalAccount.accountId)\n            }
 
             AuthResult.Success(finalAccount)
         } catch (e: Exception) {
