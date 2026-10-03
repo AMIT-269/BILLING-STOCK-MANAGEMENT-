@@ -12,12 +12,19 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Rule
+import org.junit.rules.Timeout
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ExampleRobolectricTest {
+  // Temporary diagnostic guard: identify the exact Robolectric test that hangs instead of
+  // letting the entire Gradle test task sit until the 8-minute CI shell timeout.
+  @get:Rule
+  @JvmField
+  val perTestTimeout: Timeout = Timeout.seconds(30)
   private fun uniqueTestMobile(): String {
     // Generate a valid unique 10-digit Indian mobile number for each test.
     val n = kotlin.math.abs(System.nanoTime()) % 9_000_000_000L + 1_000_000_000L
