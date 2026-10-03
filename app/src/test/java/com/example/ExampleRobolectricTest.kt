@@ -19,7 +19,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class ExampleRobolectricTest {
   private fun uniqueTestMobile(): String {
-    val n = kotlin.math.abs(System.nanoTime()) % 900000000L + 100000000L
+    // Generate a valid unique 10-digit Indian mobile number for each test.
+    val n = kotlin.math.abs(System.nanoTime()) % 9_000_000_000L + 1_000_000_000L
     return n.toString()
   }
 
