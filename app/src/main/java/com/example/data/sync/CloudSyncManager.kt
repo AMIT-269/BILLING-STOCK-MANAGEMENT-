@@ -608,6 +608,11 @@ class CloudSyncManager private constructor(private val context: Context) {
      */
     suspend fun replaceAccountIdentityInCloud(oldAccount: JewellerAccount, newAccount: JewellerAccount): Boolean = withContext(Dispatchers.IO) {
         try {
+            // Unit tests intentionally disable Firebase network access. Return to the
+            // local persistence path immediately instead of waiting on anonymous auth.
+            if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") {
+                return@withContext false
+            }
             val fs = getFirestore() ?: return@withContext false
             if (!ensureFirebaseAnonymousAuth()) return@withContext false
             val oldMob = PhoneUtil.normalizeMobile(oldAccount.mobileNumber)
