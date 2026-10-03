@@ -31,7 +31,7 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Run Unit Tests
-        run: timeout 8m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info -Dbilling.skipFirebaseNetworkTests=true
+        run: timeout 8m gradle testDebugUnitTest --tests "com.example.ExampleRobolectricTest" --no-daemon --stacktrace --console=plain --info -Dbilling.skipFirebaseNetworkTests=true
 
       - name: Assemble Debug APK
         run: timeout 6m gradle assembleDebug --no-daemon --stacktrace --console=plain
