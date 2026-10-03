@@ -1266,13 +1266,18 @@ class JewelleryRepository(private val context: Context) {
             }
 
             val targetAccountId = matchedAccount.accountId
-            repoScope.launch {
-                try {
-                    cloudSync.restoreFullAccountFromCloud(targetAccountId)
-                } catch (e: Exception) {
-                    Log.w("JewelleryRepository", "Async restoreFullAccountFromCloud skipped: ${e.message}")
+            // CI/Robolectric tests must not launch an independent repository scope.
+            // Login is exercised repeatedly in regression tests; this long-lived
+            // SupervisorJob can outlive the test method and keep the JVM alive.
+            if (System.getProperty("billing.skipFirebaseNetworkTests") != "true") {
+                repoScope.launch {
+                    try {
+                        cloudSync.restoreFullAccountFromCloud(targetAccountId)
+                    } catch (e: Exception) {
+                        Log.w("JewelleryRepository", "Async restoreFullAccountFromCloud skipped: ${e.message}")
+                    }
+                    cloudSync.startPeriodicAutoSync(targetAccountId)
                 }
-                cloudSync.startPeriodicAutoSync(targetAccountId)
             }
 
             return@withContext AuthResult.Success(matchedAccount)
