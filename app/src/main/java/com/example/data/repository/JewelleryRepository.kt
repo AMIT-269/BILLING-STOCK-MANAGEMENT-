@@ -1651,16 +1651,21 @@ class JewelleryRepository(private val context: Context) {
         if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I1: identity method entered")
 
         // Both Mobile Number and GST Number are globally unique account identities.
-        // A customer may change both together, but neither value may belong to another account.
+        // Do not scan the entire Room table from this suspend path. Every registered
+        // account is already persisted in the permanent registry and local mirror.
+        // The full Room scan can contend with Robolectric/Room and block this method
+        // before the identity update is reached.
+        if (ciDiagnostic) println("2B3-I2: before local identity conflict reads")
         val knownAccounts = try {
-            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I2: before local conflict reads")
-            val result = accountDao.getAllAccounts() + getPermanentAccountsList() + cloudSync.getLocalMirroredAccounts()
-            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I3: local conflict reads complete")
+            val result = getPermanentAccountsList() +
+                accountMemoryCache.values.toList() +
+                cloudSync.getLocalMirroredAccounts()
+            if (ciDiagnostic) println("2B3-I3: local identity conflict reads complete")
             result
         } catch (_: Exception) {
             emptyList()
         }
-        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I4: before conflict scan")
+        if (ciDiagnostic) println("2B3-I4: before identity conflict scan")
         val conflict = knownAccounts.firstOrNull {
             it.accountId != current.accountId &&
                 (
@@ -1668,7 +1673,7 @@ class JewelleryRepository(private val context: Context) {
                     PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
                 )
         }
-        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I5: conflict scan complete")
+        if (ciDiagnostic) println("2B3-I5: identity conflict scan complete")
         if (conflict != null) {
             val sameMobile = PhoneUtil.normalizeMobile(conflict.mobileNumber) == cleanMobile
             val sameGst = PhoneUtil.normalizeGst(conflict.gstNumber) == cleanGst
@@ -1686,7 +1691,7 @@ class JewelleryRepository(private val context: Context) {
                     "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )
             }
-            return Result.failure(Exception(message))
+            return Result.failure<JewellerAccount>(Exception(message))
         }
 
         // Firestore identity checks are skipped in CI/Robolectric because Firebase network is disabled there. Local persistence checks above still enforce uniqueness.
