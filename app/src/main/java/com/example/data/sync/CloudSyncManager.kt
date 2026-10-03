@@ -715,19 +715,12 @@ class CloudSyncManager private constructor(private val context: Context) {
         val cleanMob = PhoneUtil.normalizeMobile(account.mobileNumber)
         val cleanGst = PhoneUtil.normalizeGst(account.gstNumber)
         val normalizedAccount = account.copy(mobileNumber = cleanMob, gstNumber = cleanGst)
-        val existing = getLocalMirroredAccounts().toMutableList()
-        val index = existing.indexOfFirst {
-            if (account.accountId.isNotBlank() && it.accountId.isNotBlank()) {
-                it.accountId == account.accountId
-            } else {
-                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob && PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
-            }
-        }
-        if (index >= 0) {
-            existing[index] = normalizedAccount
-        } else {
-            existing.add(normalizedAccount)
-        }
+        // One permanent accountId must have exactly one local mirror identity.
+        // Remove its OLD Mobile/GST record before writing the NEW identity.
+        val existing = getLocalMirroredAccounts()
+            .filterNot { it.accountId == account.accountId }
+            .toMutableList()
+        existing.add(normalizedAccount)
         try {
             val jsonArray = org.json.JSONArray()
             for (acc in existing) {

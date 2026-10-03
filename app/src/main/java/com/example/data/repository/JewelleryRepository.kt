@@ -172,6 +172,9 @@ class JewelleryRepository(private val context: Context) {
             code4Digit = cleanCode
         )
         val identityKey = getAccountIdentityKey(cleanMob, cleanGst)
+        // Identity changes keep the same permanent accountId. Remove every cached
+        // OLD Mobile/GST identity for this account before indexing the NEW identity.
+        accountMemoryCache.entries.removeIf { it.value.accountId == normalizedAccount.accountId }
         if (identityKey.isNotBlank() && identityKey != "|") {
             accountMemoryCache[identityKey] = normalizedAccount
         }
@@ -200,6 +203,25 @@ class JewelleryRepository(private val context: Context) {
             }.toString()
 
             val editor = permanentPrefs.edit()
+
+            // Remove stale direct Mobile/GST/code keys belonging to this same accountId.
+            // Other customers' identities are never touched.
+            for ((key, value) in permanentPrefs.all) {
+                if (value is String && (key.startsWith("account_") || key.startsWith("code_"))) {
+                    val stored = parseSingleAccountJson(value)
+                    if (stored != null && stored.accountId == normalizedAccount.accountId) {
+                        val storedMob = PhoneUtil.normalizeMobile(stored.mobileNumber)
+                        val storedGst = PhoneUtil.normalizeGst(stored.gstNumber)
+                        if (storedMob != cleanMob || storedGst != cleanGst) {
+                            editor.remove(key)
+                            if (key.startsWith("account_")) {
+                                editor.remove(key.replaceFirst("account_", "code_"))
+                            }
+                        }
+                    }
+                }
+            }
+
             if (cleanMob.isNotEmpty() && cleanGst.isNotEmpty()) {
                 editor.putString("account_${cleanMob}_${cleanGst}", accountJson)
                 editor.putString("code_${cleanMob}_${cleanGst}", normalizedAccount.code4Digit)
@@ -221,20 +243,12 @@ class JewelleryRepository(private val context: Context) {
             editor.putString("last_registered_gst", normalizedAccount.gstNumber)
             editor.putString("last_registered_code", normalizedAccount.code4Digit)
 
-            val existing = getPermanentAccountsList().toMutableList()
-            val idx = existing.indexOfFirst {
-                if (normalizedAccount.accountId.isNotBlank() && it.accountId.isNotBlank()) {
-                    it.accountId == normalizedAccount.accountId
-                } else {
-                    PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMob &&
-                    PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
-                }
-            }
-            if (idx >= 0) {
-                existing[idx] = normalizedAccount
-            } else {
-                existing.add(normalizedAccount)
-            }
+            // Keep exactly one registry record for this permanent accountId.
+            // This replaces the OLD identity instead of leaving an old login identity behind.
+            val existing = getPermanentAccountsList()
+                .filterNot { it.accountId == normalizedAccount.accountId }
+                .toMutableList()
+            existing.add(normalizedAccount)
 
             val jsonArray = JSONArray()
             for (acc in existing) {
