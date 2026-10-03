@@ -681,13 +681,14 @@ class ExampleRobolectricTest {
     val shopName = "Kalyan Jewellers"
 
     // Account 1
+    val gst1 = uniqueTestGst()
     val reg1 = repo.registerNewJeweller(
       name = shopName,
       mobile = mobile,
       code = "1234",
       confirmCode = "1234",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
-      gstNumber = uniqueTestGst()
+      gstNumber = gst1
     )
     assertTrue(reg1 is AuthResult.Success)
     val acc1 = (reg1 as AuthResult.Success).account
@@ -723,7 +724,7 @@ class ExampleRobolectricTest {
 
     // Logout and log back in as Account 1
     repo.logout()
-    val login1 = repo.login(mobile, "24DDDDD4444D4Z4", "1234")
+    val login1 = repo.login(mobile, gst1, "1234")
     assertTrue(login1 is AuthResult.Success)
 
     // Bills for Account 1 must be present
