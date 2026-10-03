@@ -1796,7 +1796,7 @@ class JewelleryRepository(private val context: Context) {
             if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I15: current account updated")
             cloudSync.startPeriodicAutoSync(updated.accountId)
             if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I16: identity method complete")
-            Result.success(updated)
+            return Result.success(updated)
         } catch (e: Exception) {
             Log.e("JewelleryRepository", "updateAccountIdentityAndProfile failed", e)
             Result.failure(e)
