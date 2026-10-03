@@ -785,6 +785,7 @@ class ExampleRobolectricTest {
     val oldGst = uniqueTestGst()
     val newGst = uniqueTestGst()
 
+    println("2B3-C1: before register")
     val reg = repo.registerNewJeweller(
       name = "Dummy Demo Shop",
       mobile = oldMobile,
@@ -794,19 +795,24 @@ class ExampleRobolectricTest {
       gstNumber = oldGst
     )
     assertTrue("Dummy registration should succeed", reg is AuthResult.Success)
+    println("2B3-C2: register complete")
     val accountId = (reg as AuthResult.Success).account.accountId
 
+    println("2B3-C3: before identity update")
     val changed = repo.updateAccountIdentityAndProfile(
       jewellerName = "Customer Real Shop",
       mobileNumber = newMobile,
       gstNumber = newGst
     )
     assertTrue("Identity change should succeed", changed.isSuccess)
+    println("2B3-C4: identity update complete")
     val updatedAccount = changed.getOrThrow()
     assertEquals(accountId, updatedAccount.accountId)
 
+    println("2B3-C5: before settings read")
     val oldSettings = repo.getSettingsDirect(accountId)
     assertTrue("Settings record must exist", oldSettings != null)
+    println("2B3-C6: before settings update")
     repo.updateSettings(
       oldSettings!!.copy(
         jewellerName = updatedAccount.jewellerName,
@@ -816,18 +822,26 @@ class ExampleRobolectricTest {
       )
     )
 
+    println("2B3-C7: settings update complete; before logout")
     repo.logout()
+    println("2B3-C8: logout complete")
 
+    println("2B3-C9: before old login")
     val oldLogin = repo.login(oldMobile, oldGst, "1234")
     assertTrue("Old dummy Mobile + GST must no longer login", oldLogin is AuthResult.Error)
+    println("2B3-C10: old login complete")
 
+    println("2B3-C11: before new login")
     val newLogin = repo.login(newMobile, newGst, "1234")
     assertTrue("New Mobile + GST must login", newLogin is AuthResult.Success)
+    println("2B3-C12: new login complete")
 
+    println("2B3-C13: before final settings read")
     val settingsAfterLogin = repo.getSettingsDirect(accountId)
     assertEquals("Customer Real Shop", settingsAfterLogin?.jewellerName)
     assertEquals(newMobile, settingsAfterLogin?.contactNumber)
     assertEquals(newGst, settingsAfterLogin?.gstNumber)
+    println("2B3-C14: test complete")
   }
 
   @Test
