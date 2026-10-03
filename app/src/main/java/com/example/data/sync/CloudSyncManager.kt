@@ -2341,6 +2341,16 @@ class CloudSyncManager private constructor(private val context: Context) {
      */
     fun startPeriodicAutoSync(accountId: String) {
         if (accountId.isBlank()) return
+
+        // Unit/Robolectric tests must not start an infinite background coroutine.
+        // The test JVM waits for the Dispatchers.IO worker to terminate, so the
+        // periodic 20-second sync loop can make testDebugUnitTest appear hung.
+        // Firebase/network calls are already disabled by the same CI flag.
+        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") {
+            Log.i(TAG, "Periodic auto-sync disabled for unit tests")
+            return
+        }
+
         startRealtimeCloudSync(accountId)
         periodicSyncJob?.cancel()
         periodicSyncJob = scope.launch {
