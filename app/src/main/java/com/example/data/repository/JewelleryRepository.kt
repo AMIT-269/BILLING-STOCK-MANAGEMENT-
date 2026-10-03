@@ -1601,7 +1601,9 @@ class JewelleryRepository(private val context: Context) {
         mobileNumber: String,
         gstNumber: String,
         newCode4Digit: String? = null
-    ): Result<JewellerAccount> = withContext(Dispatchers.IO) {
+    ): Result<JewellerAccount> = withContext(
+        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") Dispatchers.Default else Dispatchers.IO
+    ) {
         val current = _currentAccount.value ?: return@withContext Result.failure(Exception("No account is currently logged in."))
         val cleanName = normalizeText(jewellerName).ifBlank { current.jewellerName }
         val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
