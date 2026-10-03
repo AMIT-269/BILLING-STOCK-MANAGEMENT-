@@ -24,6 +24,11 @@ class ExampleRobolectricTest {
     return n.toString()
   }
 
+  private fun uniqueTestGst(): String {
+    val n = kotlin.math.abs(System.nanoTime()) % 1_000_000L
+    return "24AAA" + n.toString().padStart(6, '0') + "A1Z1"
+  }
+
 
   @Test
   fun `mobile normalization accepts exact 10 digits and common prefixes`() {
@@ -721,6 +726,99 @@ class ExampleRobolectricTest {
     // Bills for Account 2 must be 0
     val bills2 = db.billDao().getAllBillsDirect(acc2.accountId)
     assertEquals(0, bills2.size)
+  }
+
+
+  @Test
+  fun `verify duplicate GST with different mobile cannot create second account`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+
+    val gst = uniqueTestGst()
+    val mobileA = uniqueTestMobile()
+    val mobileB = uniqueTestMobile()
+
+    val regA = repo.registerNewJeweller(
+      name = "GST Unique Shop A",
+      mobile = mobileA,
+      code = "1111",
+      confirmCode = "1111",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = gst
+    )
+    assertTrue("First registration should succeed", regA is AuthResult.Success)
+
+    repo.logout()
+
+    val regB = repo.registerNewJeweller(
+      name = "GST Unique Shop B",
+      mobile = mobileB,
+      code = "2222",
+      confirmCode = "2222",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = gst
+    )
+    assertTrue("Same GST with a different mobile must fail", regB is AuthResult.Error)
+    assertTrue(
+      "Duplicate GST error must mention GST",
+      (regB as AuthResult.Error).message.contains("GST", ignoreCase = true) ||
+        (regB as AuthResult.Error).message.contains("જીએસટી", ignoreCase = true)
+    )
+  }
+
+  @Test
+  fun `verify changed dummy identity cannot login with old details and settings show new details`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repo = JewelleryRepository(context)
+
+    val oldMobile = uniqueTestMobile()
+    val newMobile = uniqueTestMobile()
+    val oldGst = uniqueTestGst()
+    val newGst = uniqueTestGst()
+
+    val reg = repo.registerNewJeweller(
+      name = "Dummy Demo Shop",
+      mobile = oldMobile,
+      code = "1234",
+      confirmCode = "1234",
+      licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
+      gstNumber = oldGst
+    )
+    assertTrue("Dummy registration should succeed", reg is AuthResult.Success)
+    val accountId = (reg as AuthResult.Success).account.accountId
+
+    val changed = repo.updateAccountIdentityAndProfile(
+      jewellerName = "Customer Real Shop",
+      mobileNumber = newMobile,
+      gstNumber = newGst
+    )
+    assertTrue("Identity change should succeed", changed.isSuccess)
+    val updatedAccount = changed.getOrThrow()
+    assertEquals(accountId, updatedAccount.accountId)
+
+    val oldSettings = repo.getSettingsDirect(accountId)
+    assertTrue("Settings record must exist", oldSettings != null)
+    repo.updateSettings(
+      oldSettings!!.copy(
+        jewellerName = updatedAccount.jewellerName,
+        contactNumber = updatedAccount.mobileNumber,
+        gstNumber = updatedAccount.gstNumber,
+        updatedAt = System.currentTimeMillis()
+      )
+    )
+
+    repo.logout()
+
+    val oldLogin = repo.login(oldMobile, oldGst, "1234")
+    assertTrue("Old dummy Mobile + GST must no longer login", oldLogin is AuthResult.Error)
+
+    val newLogin = repo.login(newMobile, newGst, "1234")
+    assertTrue("New Mobile + GST must login", newLogin is AuthResult.Success)
+
+    val settingsAfterLogin = repo.getSettingsDirect(accountId)
+    assertEquals("Customer Real Shop", settingsAfterLogin?.jewellerName)
+    assertEquals(newMobile, settingsAfterLogin?.contactNumber)
+    assertEquals(newGst, settingsAfterLogin?.gstNumber)
   }
 
   @Test
