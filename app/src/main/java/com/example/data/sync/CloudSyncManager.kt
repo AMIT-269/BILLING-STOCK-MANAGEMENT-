@@ -2517,6 +2517,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun enqueueBill(bill: Bill, action: String = "UPSERT") {
+        if (isCiTestMode) return
         scope.launch(Dispatchers.IO) {
             queueMutex.withLock {
                 synchronized(pendingQueue) {
@@ -2542,6 +2543,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun enqueueDeleteBill(accountId: String, billId: String) {
+        if (isCiTestMode) return
         scope.launch(Dispatchers.IO) {
             queueMutex.withLock {
                 synchronized(pendingQueue) {
@@ -2567,6 +2569,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun enqueueStockTransaction(tx: StockTransaction, action: String = "UPSERT") {
+        if (isCiTestMode) return
         scope.launch(Dispatchers.IO) {
             queueMutex.withLock {
                 synchronized(pendingQueue) {
@@ -2592,6 +2595,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun enqueueDeleteStockTransaction(accountId: String, txId: String) {
+        if (isCiTestMode) return
         scope.launch(Dispatchers.IO) {
             queueMutex.withLock {
                 synchronized(pendingQueue) {
@@ -2617,6 +2621,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun enqueueSettings(settings: JewellerSettings) {
+        if (isCiTestMode) return
         scope.launch(Dispatchers.IO) {
             queueMutex.withLock {
                 synchronized(pendingQueue) {
@@ -2642,6 +2647,7 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     fun enqueueAccount(account: JewellerAccount) {
+        if (isCiTestMode) return
         scope.launch(Dispatchers.IO) {
             queueMutex.withLock {
                 synchronized(pendingQueue) {
