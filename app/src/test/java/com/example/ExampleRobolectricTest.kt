@@ -19,6 +19,7 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
+// Isolated 2B-3 C1-C3 diagnostic
 class ExampleRobolectricTest {
   // Temporary diagnostic guard: identify the exact Robolectric test that hangs instead of
   // letting the entire Gradle test task sit until the 8-minute CI shell timeout.
