@@ -611,13 +611,21 @@ class JewelleryViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                val identityResult = repository.updateAccountIdentityAndProfile(
+                    jewellerName = name,
+                    mobileNumber = contactNumber.ifBlank { account.mobileNumber },
+                    gstNumber = gstNumber,
+                    newCode4Digit = null
+                )
+                val updatedAccount = identityResult.getOrElse { throw it }
+
                 val updated = JewellerSettings(
-                    accountId = account.accountId,
-                    jewellerName = name.trim().ifBlank { account.jewellerName },
+                    accountId = updatedAccount.accountId,
+                    jewellerName = updatedAccount.jewellerName,
                     address = address.trim(),
-                    gstNumber = gstNumber.trim().uppercase(),
+                    gstNumber = updatedAccount.gstNumber,
                     logoBase64 = logoBase64,
-                    contactNumber = contactNumber.trim().ifBlank { account.mobileNumber },
+                    contactNumber = updatedAccount.mobileNumber,
                     goldRate22k = goldRate22k,
                     silverRate = silverRate,
                     goldHsnCode = goldHsnCode.trim(),
