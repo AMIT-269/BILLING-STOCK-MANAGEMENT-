@@ -1628,13 +1628,20 @@ class JewelleryRepository(private val context: Context) {
         val oldMobile = PhoneUtil.normalizeMobile(current.mobileNumber)
         val oldGst = PhoneUtil.normalizeGst(current.gstNumber)
 
+        val ciDiagnostic = System.getProperty("billing.skipFirebaseNetworkTests") == "true"
+        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I1: identity method entered")
+
         // Both Mobile Number and GST Number are globally unique account identities.
         // A customer may change both together, but neither value may belong to another account.
         val knownAccounts = try {
-            accountDao.getAllAccounts() + getPermanentAccountsList() + cloudSync.getLocalMirroredAccounts()
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I2: before local conflict reads")
+            val result = accountDao.getAllAccounts() + getPermanentAccountsList() + cloudSync.getLocalMirroredAccounts()
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I3: local conflict reads complete")
+            result
         } catch (_: Exception) {
             emptyList()
         }
+        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I4: before conflict scan")
         val conflict = knownAccounts.firstOrNull {
             it.accountId != current.accountId &&
                 (
@@ -1642,6 +1649,7 @@ class JewelleryRepository(private val context: Context) {
                     PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
                 )
         }
+        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I5: conflict scan complete")
         if (conflict != null) {
             val sameMobile = PhoneUtil.normalizeMobile(conflict.mobileNumber) == cleanMobile
             val sameGst = PhoneUtil.normalizeGst(conflict.gstNumber) == cleanGst
@@ -1684,6 +1692,7 @@ class JewelleryRepository(private val context: Context) {
             }
         }
 
+        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I6: before updated account")
         val updated = current.copy(
             jewellerName = cleanName,
             mobileNumber = cleanMobile,
@@ -1692,7 +1701,9 @@ class JewelleryRepository(private val context: Context) {
         )
         try {
             // Replace the Room row and remove all old identity keys before writing the new identity.
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I7: before Room insert")
             accountDao.insertAccount(updated)
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I8: Room insert complete")
             val editor = permanentPrefs.edit()
             if (oldMobile.isNotEmpty() && oldGst.isNotEmpty()) {
                 editor.remove("account_${oldMobile}_${oldGst}")
@@ -1739,12 +1750,18 @@ class JewelleryRepository(private val context: Context) {
             editor.putString("last_registered_gst", updated.gstNumber)
             editor.putString("last_registered_code", updated.code4Digit)
             editor.commit()
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I9: prefs commit complete")
             writeVaultFiles(listJson)
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I10: vault write complete")
             accountMemoryCache.entries.removeIf { it.value.accountId == current.accountId }
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I11: before saveAccountPermanently")
             saveAccountPermanently(updated)
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I12: saveAccountPermanently complete")
 
             // Firestore batch removes the old dummy identity indexes and creates the new ones atomically.
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I13: before cloud identity replace")
             cloudSync.replaceAccountIdentityInCloud(current, updated)
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I14: cloud identity replace complete")
 
             sessionPrefs.edit()
                 .putString("logged_in_account_id", updated.accountId)
@@ -1757,7 +1774,9 @@ class JewelleryRepository(private val context: Context) {
                 .putString("last_code4digit", updated.code4Digit)
                 .commit()
             _currentAccount.value = updated
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I15: current account updated")
             cloudSync.startPeriodicAutoSync(updated.accountId)
+            if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I16: identity method complete")
             Result.success(updated)
         } catch (e: Exception) {
             Log.e("JewelleryRepository", "updateAccountIdentityAndProfile failed", e)
