@@ -1490,6 +1490,136 @@ class JewelleryRepository(private val context: Context) {
         settingsDao.getSettingsDirect(accountId)
     }
 
+    /**
+     * Changes the account identity/profile while keeping the permanent accountId and all
+     * bills, stock, credit/debit and settings data attached to that account.
+     * The old Mobile/GST identity is removed from local registries and cloud indexes so
+     * the original dummy credentials stop working after customer activation.
+     */
+    suspend fun updateAccountIdentityAndProfile(
+        jewellerName: String,
+        mobileNumber: String,
+        gstNumber: String,
+        newCode4Digit: String? = null
+    ): Result<JewellerAccount> = withContext(Dispatchers.IO) {
+        val current = _currentAccount.value ?: return@withContext Result.failure(Exception("No account is currently logged in."))
+        val cleanName = normalizeText(jewellerName).ifBlank { current.jewellerName }
+        val cleanMobile = PhoneUtil.normalizeMobile(mobileNumber)
+        val cleanGst = PhoneUtil.normalizeGst(gstNumber)
+        val cleanCode = PhoneUtil.normalizeCode(newCode4Digit ?: current.code4Digit)
+
+        if (cleanMobile.length != 10 || cleanMobile.all { it == '0' }) {
+            return@withContext Result.failure(Exception(loc("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય 10 અંકનો મોબાઈલ નંબર દાખલ કરો.")))
+        }
+        if (cleanGst.isEmpty()) {
+            return@withContext Result.failure(Exception(loc("Please enter GST Number.", "કૃપા કરીને GST નંબર દાખલ કરો.")))
+        }
+        if (cleanCode.length != 4) {
+            return@withContext Result.failure(Exception(loc("Please enter 4-digit code.", "કૃપા કરીને 4 અંકનો કોડ દાખલ કરો.")))
+        }
+
+        val identityChanged = cleanMobile != PhoneUtil.normalizeMobile(current.mobileNumber) ||
+            cleanGst != PhoneUtil.normalizeGst(current.gstNumber) ||
+            cleanName != current.jewellerName
+        if (!identityChanged && cleanCode == PhoneUtil.normalizeCode(current.code4Digit)) {
+            return@withContext Result.success(current)
+        }
+
+        // Prevent changing into another existing account's exact identity.
+        val knownAccounts = try { accountDao.getAllAccounts() + getPermanentAccountsList() + cloudSync.getLocalMirroredAccounts() } catch (_: Exception) { emptyList() }
+        val conflict = knownAccounts.firstOrNull {
+            it.accountId != current.accountId &&
+                PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
+                PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
+        }
+        if (conflict != null) {
+            return@withContext Result.failure(Exception(loc("This Mobile Number + GST Number already belongs to another account.", "આ Mobile Number + GST Number બીજા એકાઉન્ટ સાથે જોડાયેલ છે.")))
+        }
+
+        val updated = current.copy(
+            jewellerName = cleanName,
+            mobileNumber = cleanMobile,
+            gstNumber = cleanGst,
+            code4Digit = cleanCode
+        )
+        val oldMobile = PhoneUtil.normalizeMobile(current.mobileNumber)
+        val oldGst = PhoneUtil.normalizeGst(current.gstNumber)
+
+        try {
+            // Replace the Room row and remove all old identity keys before writing the new identity.
+            accountDao.insertAccount(updated)
+            val editor = permanentPrefs.edit()
+            if (oldMobile.isNotEmpty() && oldGst.isNotEmpty()) {
+                editor.remove("account_${oldMobile}_${oldGst}")
+                editor.remove("code_${oldMobile}_${oldGst}")
+            }
+            if (oldGst.isNotEmpty()) {
+                editor.remove("account_gst_$oldGst")
+                editor.remove("code_gst_$oldGst")
+            }
+            val oldDirect = parseSingleAccountJson(permanentPrefs.getString("account_$oldMobile", null))
+            if (oldDirect?.accountId == current.accountId) {
+                editor.remove("account_$oldMobile")
+                editor.remove("code_$oldMobile")
+            }
+            val list = getPermanentAccountsList().filterNot { it.accountId == current.accountId }.toMutableList()
+            list.add(updated)
+            val arr = JSONArray()
+            list.forEach { acc ->
+                arr.put(JSONObject().apply {
+                    put("accountId", acc.accountId)
+                    put("jewellerName", acc.jewellerName)
+                    put("mobileNumber", acc.mobileNumber)
+                    put("code4Digit", acc.code4Digit)
+                    put("gstNumber", acc.gstNumber)
+                    put("isLicensed", acc.isLicensed)
+                    put("status", acc.status)
+                    put("createdAt", acc.createdAt)
+                })
+            }
+            val listJson = arr.toString()
+            editor.putString("registered_accounts_list", listJson)
+            editor.putString("last_registered_account", JSONObject().apply {
+                put("accountId", updated.accountId)
+                put("jewellerName", updated.jewellerName)
+                put("mobileNumber", updated.mobileNumber)
+                put("code4Digit", updated.code4Digit)
+                put("gstNumber", updated.gstNumber)
+                put("isLicensed", updated.isLicensed)
+                put("status", updated.status)
+                put("createdAt", updated.createdAt)
+            }.toString())
+            editor.putString("last_registered_mobile", updated.mobileNumber)
+            editor.putString("last_registered_name", updated.jewellerName)
+            editor.putString("last_registered_gst", updated.gstNumber)
+            editor.putString("last_registered_code", updated.code4Digit)
+            editor.commit()
+            writeVaultFiles(listJson)
+            accountMemoryCache.entries.removeIf { it.value.accountId == current.accountId }
+            saveAccountPermanently(updated)
+
+            // Firestore batch removes the old dummy identity indexes and creates the new ones atomically.
+            cloudSync.replaceAccountIdentityInCloud(current, updated)
+
+            sessionPrefs.edit()
+                .putString("logged_in_account_id", updated.accountId)
+                .putString("logged_in_name", updated.jewellerName)
+                .putString("logged_in_mobile", updated.mobileNumber)
+                .putString("logged_in_gst", updated.gstNumber)
+                .putString("last_jeweller_name", updated.jewellerName)
+                .putString("last_mobile_number", updated.mobileNumber)
+                .putString("last_gst_number", updated.gstNumber)
+                .putString("last_code4digit", updated.code4Digit)
+                .commit()
+            _currentAccount.value = updated
+            cloudSync.startPeriodicAutoSync(updated.accountId)
+            Result.success(updated)
+        } catch (e: Exception) {
+            Log.e("JewelleryRepository", "updateAccountIdentityAndProfile failed", e)
+            Result.failure(e)
+        }
+    }
+
     suspend fun updateSettings(settings: JewellerSettings) = withContext(Dispatchers.IO) {
         settingsDao.insertOrUpdate(settings)
         cloudSync.syncSettingsToCloud(settings)
