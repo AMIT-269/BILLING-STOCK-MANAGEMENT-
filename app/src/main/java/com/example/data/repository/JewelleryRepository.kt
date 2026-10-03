@@ -1657,8 +1657,7 @@ class JewelleryRepository(private val context: Context) {
         val oldMobile = PhoneUtil.normalizeMobile(current.mobileNumber)
         val oldGst = PhoneUtil.normalizeGst(current.gstNumber)
 
-        val ciDiagnostic = System.getProperty("billing.skipFirebaseNetworkTests") == "true"
-        if (ciDiagnostic) Log.i("JewelleryRepository", "2B3-I1: identity method entered")
+        if (ciDiagnostic) println("2B3-I1: identity method entered")
 
         // Both Mobile Number and GST Number are globally unique account identities.
         // Do not scan the entire Room table from this suspend path. Every registered
