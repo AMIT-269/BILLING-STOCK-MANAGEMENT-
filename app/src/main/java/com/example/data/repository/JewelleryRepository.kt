@@ -685,7 +685,7 @@ class JewelleryRepository(private val context: Context) {
         if (existingMobileAccount != null) {
             return@withContext AuthResult.Error(
                 loc(
-                    "This Mobile Number is already registered. Please use a different Mobile Number or login to the existing account.",
+                    "This Mobile Number is already registered",
                     "આ Mobile Number પહેલેથી રજીસ્ટર છે. અલગ Mobile Number વાપરો અથવા હાલના accountમાં login કરો."
                 )
             )
@@ -702,7 +702,7 @@ class JewelleryRepository(private val context: Context) {
         if (existingGstAccount != null) {
             return@withContext AuthResult.Error(
                 loc(
-                    "This GST Number is already registered. Please use a different GST Number or login to the existing account.",
+                    "This GST Number is already registered",
                     "આ GST Number પહેલેથી રજીસ્ટર છે. અલગ GST Number વાપરો અથવા હાલના accountમાં login કરો."
                 )
             )
@@ -1643,15 +1643,15 @@ class JewelleryRepository(private val context: Context) {
             val sameGst = PhoneUtil.normalizeGst(conflict.gstNumber) == cleanGst
             val message = when {
                 sameMobile && sameGst -> loc(
-                    "This Mobile Number and GST Number already belong to another account.",
+                    "This Mobile Number is already registered",
                     "આ Mobile Number અને GST Number બીજા એકાઉન્ટ સાથે જોડાયેલા છે."
                 )
                 sameMobile -> loc(
-                    "This Mobile Number is already registered to another account.",
+                    "This Mobile Number is already registered",
                     "આ Mobile Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )
                 else -> loc(
-                    "This GST Number is already registered to another account.",
+                    "This GST Number is already registered",
                     "આ GST Number બીજા એકાઉન્ટમાં પહેલેથી રજીસ્ટર છે."
                 )
             }
