@@ -30,19 +30,37 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Run Robolectric tests group 2
+      - name: Run Robolectric tests group 2A
         run: >
-          timeout 4m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
           --tests "com.example.ExampleRobolectricTest.verify bill update does not duplicate bill or stock records"
           --tests "com.example.ExampleRobolectricTest.verify two accounts with same mobile and different GST enforce GST on login and authenticate separately"
           --tests "com.example.ExampleRobolectricTest.verify wrong 4-digit code does not trigger mobile not registered"
+
+      - name: Run Robolectric tests group 2B
+        if: success()
+        run: >
+          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          -Dbilling.skipFirebaseNetworkTests=true
           --tests "com.example.ExampleRobolectricTest.verify same jeweller name with different mobile and GST creates separate accounts and preserves bills across sessions"
           --tests "com.example.ExampleRobolectricTest.verify duplicate GST with different mobile cannot create second account"
           --tests "com.example.ExampleRobolectricTest.verify changed dummy identity cannot login with old details and settings show new details"
+
+      - name: Run Robolectric tests group 2C
+        if: success()
+        run: >
+          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          -Dbilling.skipFirebaseNetworkTests=true
           --tests "com.example.ExampleRobolectricTest.verify network and timeout errors during login never show mobile not registered"
           --tests "com.example.ExampleRobolectricTest.verify online unregistered mobile shows clear registration error message"
           --tests "com.example.ExampleRobolectricTest.verify silver payment rate is kg based and never multiplied by 1000"
+
+      - name: Run Robolectric tests group 2D
+        if: success()
+        run: >
+          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          -Dbilling.skipFirebaseNetworkTests=true
           --tests "com.example.ExampleRobolectricTest.verify inline silver payment uses kg rate exactly once"
           --tests "com.example.ExampleRobolectricTest.normalize legacy Silver payment amount stored with wrong kg unit"
 
