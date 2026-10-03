@@ -6,9 +6,15 @@ on:
     branches:
       - main
 
+# Keep only the newest main build running so stale/stuck runs do not block validation.
+concurrency:
+  group: android-apk-build-main
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
