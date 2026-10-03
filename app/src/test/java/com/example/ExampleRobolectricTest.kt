@@ -779,6 +779,7 @@ class ExampleRobolectricTest {
   @Test
   fun `diagnostic account identity update C1 C2 C3 only`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
+    System.setProperty("billing.skipFirebaseNetworkTests", "true")
     val repo = JewelleryRepository(context)
     val oldMobile = uniqueTestMobile()
     val newMobile = uniqueTestMobile()
@@ -801,7 +802,7 @@ class ExampleRobolectricTest {
     val watchdog = Thread {
       try {
         Thread.sleep(5_000)
-        println("2B3-WATCHDOG: identity update still blocked after 15s")
+        println("2B3-WATCHDOG: identity update still blocked after 5s")
         Thread.getAllStackTraces().forEach { (thread, stack) ->
           println("2B3-THREAD: ${thread.name} state=${thread.state}")
           stack.take(20).forEach { frame -> println("    at $frame") }
