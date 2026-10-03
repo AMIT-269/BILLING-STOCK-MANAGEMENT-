@@ -800,7 +800,7 @@ class ExampleRobolectricTest {
     println("2B3-C3: before identity update")
     val watchdog = Thread {
       try {
-        Thread.sleep(15_000)
+        Thread.sleep(5_000)
         println("2B3-WATCHDOG: identity update still blocked after 15s")
         Thread.getAllStackTraces().forEach { (thread, stack) ->
           println("2B3-THREAD: ${thread.name} state=${thread.state}")
