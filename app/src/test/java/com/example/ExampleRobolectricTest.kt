@@ -816,3 +816,4 @@ class ExampleRobolectricTest {
   }
 
 }
+}
