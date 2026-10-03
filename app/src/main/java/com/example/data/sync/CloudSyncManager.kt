@@ -114,10 +114,17 @@ class CloudSyncManager private constructor(private val context: Context) {
         }
     }
 
+    // CI/Robolectric test mode: do not start background WorkManager/network
+    // monitors or infinite periodic jobs; they can keep the test JVM alive.
+    private val isCiTestMode: Boolean
+        get() = System.getProperty("billing.skipFirebaseNetworkTests") == "true"
+
     init {
         loadPendingQueueFromDisk()
-        initNetworkMonitoring()
-        schedulePeriodicSafetySync()
+        if (!isCiTestMode) {
+            initNetworkMonitoring()
+            schedulePeriodicSafetySync()
+        }
     }
 
     fun scheduleWorkManagerSync() {
