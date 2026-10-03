@@ -6,7 +6,6 @@ on:
     branches:
       - main
 
-# Keep only the newest main build running so stale/stuck runs do not block validation.
 concurrency:
   group: android-apk-build-main
   cancel-in-progress: true
@@ -20,19 +19,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '9.3.1'
 
-      # Keep tests and APK compilation as separate steps so a stuck test/build
-      # is visible immediately instead of looking like one generic Build step.
       - name: Run Unit Tests
         run: timeout 8m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info -Dbilling.skipFirebaseNetworkTests=true
 
