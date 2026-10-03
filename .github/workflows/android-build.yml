@@ -30,17 +30,33 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Run Unit Tests
-        run: timeout 8m gradle testDebugUnitTest --tests "com.example.ExampleRobolectricTest" --no-daemon --stacktrace --console=plain --info -Dbilling.skipFirebaseNetworkTests=true
+      - name: Run Robolectric tests group 1
+        run: >
+          timeout 4m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          -Dbilling.skipFirebaseNetworkTests=true
+          --tests "com.example.ExampleRobolectricTest.mobile normalization accepts exact 10 digits and common prefixes"
+          --tests "com.example.ExampleRobolectricTest.read string from context"
+          --tests "com.example.ExampleRobolectricTest.verify owner licence code validation"
+          --tests "com.example.ExampleRobolectricTest.verify registration login and granular error handling"
+          --tests "com.example.ExampleRobolectricTest.verify registration login forgot password with GST number and change code"
+          --tests "com.example.ExampleRobolectricTest.verify language manager digits stay 0-9 in all supported languages"
+          --tests "com.example.ExampleRobolectricTest.verify fine 100 percent calculation logic - 10g at 80 touch equals 8g fine"
+          --tests "com.example.ExampleRobolectricTest.verify customer sale and karigar purchase bill numbering with jeweller initials and sequential digits"
+          --tests "com.example.ExampleRobolectricTest.verify exact silver sale and payment kg calculation example"
+          --tests "com.example.ExampleRobolectricTest.verify persistent registration and login protocol across app closure and time delay"
+          --tests "com.example.ExampleRobolectricTest.verify repeated logout and login cycles survive continuously"
+          --tests "com.example.ExampleRobolectricTest.verify multi-payment bill preserves fine metal and cash breakdown in bill text and json"
 
       - name: Assemble Debug APK
+        if: success()
         run: timeout 6m gradle assembleDebug --no-daemon --stacktrace --console=plain
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v5
         with:
           name: BILLING-STOCK-MANAGEMENT-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-# Silver kg-rate regression build trigger 2026-09-30 - verified rebuild
+# Diagnostic: isolate first half of ExampleRobolectricTest after full class timed out.
