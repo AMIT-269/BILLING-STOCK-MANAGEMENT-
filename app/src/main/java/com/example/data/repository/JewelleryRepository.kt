@@ -31,6 +31,7 @@ import java.io.FileOutputStream
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.coroutineContext
 import com.example.ui.locale.loc
 import com.example.ui.locale.LanguageManager
 
@@ -1602,7 +1603,7 @@ class JewelleryRepository(private val context: Context) {
         gstNumber: String,
         newCode4Digit: String? = null
     ): Result<JewellerAccount> = withContext(
-        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") Dispatchers.Unconfined else Dispatchers.IO
+        if (System.getProperty("billing.skipFirebaseNetworkTests") == "true") coroutineContext else Dispatchers.IO
     ) {
         val current = _currentAccount.value ?: return@withContext Result.failure(Exception("No account is currently logged in."))
         val cleanName = normalizeText(jewellerName).ifBlank { current.jewellerName }
