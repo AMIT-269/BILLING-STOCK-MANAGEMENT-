@@ -677,7 +677,21 @@ class JewelleryRepository(private val context: Context) {
         val cloudAccounts = cloudSync.getAllAccountsFromCloud()
         val allAccounts = (localAccounts + permAccounts + cloudAccounts)
 
-        // Find existing account by BOTH exact mobile and exact GST
+        // A mobile number is a unique login identity. Never allow the same mobile
+        // to create a second account just by changing the GST number.
+        val existingMobileAccount = allAccounts.firstOrNull {
+            PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile
+        }
+        if (existingMobileAccount != null) {
+            return@withContext AuthResult.Error(
+                loc(
+                    "This Mobile Number is already registered. Please use a different Mobile Number or login to the existing account.",
+                    "આ Mobile Number પહેલેથી રજીસ્ટર છે. અલગ Mobile Number વાપરો અથવા હાલના accountમાં login કરો."
+                )
+            )
+        }
+
+        // Defensive exact identity lookup for stale indexes.
         val existingAccount = allAccounts.firstOrNull {
             PhoneUtil.normalizeMobile(it.mobileNumber) == cleanMobile &&
             PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
@@ -686,7 +700,6 @@ class JewelleryRepository(private val context: Context) {
             if (cloudRes is CloudSyncManager.CloudLookupResult.Found) cloudRes.account else null
         } catch (_: Exception) { null }
 
-        // Reuse existing accountId ONLY if re-registering same mobile AND same GST, otherwise unique ID
         val cleanGstSafe = cleanGst.filter { it.isLetterOrDigit() }.take(15)
         val targetAccountId = existingAccount?.accountId ?: "jwl_${cleanMobile}_${cleanGstSafe.ifEmpty { "reg" }}"
 
@@ -1173,6 +1186,30 @@ class JewelleryRepository(private val context: Context) {
                 .commit()
 
             _currentAccount.value = matchedAccount
+
+            // Account identity is the source of truth for Name/Mobile/GST.
+            // Repair any older settings record after login while preserving address/logo/rates.
+            try {
+                val existingSettings = settingsDao.getSettingsDirect(matchedAccount.accountId)
+                if (existingSettings != null) {
+                    val normalizedSettings = existingSettings.copy(
+                        jewellerName = matchedAccount.jewellerName,
+                        contactNumber = matchedAccount.mobileNumber,
+                        gstNumber = matchedAccount.gstNumber,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    if (
+                        existingSettings.jewellerName != normalizedSettings.jewellerName ||
+                        PhoneUtil.normalizeMobile(existingSettings.contactNumber) != PhoneUtil.normalizeMobile(normalizedSettings.contactNumber) ||
+                        PhoneUtil.normalizeGst(existingSettings.gstNumber) != PhoneUtil.normalizeGst(normalizedSettings.gstNumber)
+                    ) {
+                        settingsDao.insertOrUpdate(normalizedSettings)
+                        try { cloudSync.syncSettingsToCloud(normalizedSettings) } catch (_: Exception) {}
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("JewelleryRepository", "Login identity/settings reconciliation skipped: " + e.message)
+            }
 
             val targetAccountId = matchedAccount.accountId
             repoScope.launch {
