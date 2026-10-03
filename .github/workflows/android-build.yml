@@ -30,33 +30,11 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Run Robolectric tests group 2A
+      - name: Run isolated 2B-3 C1-C3 diagnostic
         run: >
           timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify bill update does not duplicate bill or stock records"
-          --tests "com.example.ExampleRobolectricTest.verify two accounts with same mobile and different GST enforce GST on login and authenticate separately"
-          --tests "com.example.ExampleRobolectricTest.verify wrong 4-digit code does not trigger mobile not registered"
-
-      - name: Run Robolectric test 2B-1
-        if: success()
-        run: >
-          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
-          -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify same jeweller name with different mobile and GST creates separate accounts and preserves bills across sessions"
-
-      - name: Run Robolectric test 2B-2
-        if: success()
-        run: >
-          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
-          -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify duplicate GST with different mobile cannot create second account"
-
-      - name: Run Robolectric test 2B-3
-        run: >
-          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
-          -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify changed dummy identity cannot login with old details and settings show new details"
+          --tests "com.example.ExampleRobolectricTest.diagnostic account identity update C1 C2 C3 only"
 
       - name: Run Robolectric tests group 2C
         if: success()
