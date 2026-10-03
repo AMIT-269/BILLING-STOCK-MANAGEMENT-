@@ -693,12 +693,11 @@ class JewelleryRepository(private val context: Context) {
 
         // GST Number is also a globally unique registration identity.
         // A second account must never be created with the same GST and a different Mobile.
+        // getAllAccountsFromCloud() above already merges the local mirror, Room,
+        // and Firestore accounts. Reusing that snapshot avoids a second nested
+        // Firestore/auth lookup for every registration and prevents test/build hangs.
         val existingGstAccount = allAccounts.firstOrNull {
             PhoneUtil.normalizeGst(it.gstNumber) == cleanGst
-        } ?: try {
-            cloudSync.findAccountByGstInCloud(cleanGst)
-        } catch (_: Exception) {
-            null
         }
         if (existingGstAccount != null) {
             return@withContext AuthResult.Error(
