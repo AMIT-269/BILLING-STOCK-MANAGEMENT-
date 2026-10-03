@@ -618,6 +618,7 @@ class ExampleRobolectricTest {
     assertEquals("Shop Alpha", loggedInA.jewellerName)
     assertEquals(gstA, loggedInA.gstNumber)
     assertEquals(accountA.accountId, loggedInA.accountId)
+  }
 
   @Test
   fun `verify wrong 4-digit code does not trigger mobile not registered`() = runBlocking {
