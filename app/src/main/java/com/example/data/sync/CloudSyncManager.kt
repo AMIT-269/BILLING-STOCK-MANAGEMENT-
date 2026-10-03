@@ -587,6 +587,52 @@ class CloudSyncManager private constructor(private val context: Context) {
     }
 
     /**
+     * Replaces an account's login identity while preserving its permanent accountId and all data.
+     * Old Mobile/GST identity indexes are removed and the new identity indexes are written atomically.
+     */
+    suspend fun replaceAccountIdentityInCloud(oldAccount: JewellerAccount, newAccount: JewellerAccount): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val fs = getFirestore() ?: return@withContext false
+            if (!ensureFirebaseAnonymousAuth()) return@withContext false
+            val oldMob = PhoneUtil.normalizeMobile(oldAccount.mobileNumber)
+            val oldGst = PhoneUtil.normalizeGst(oldAccount.gstNumber)
+            val newMob = PhoneUtil.normalizeMobile(newAccount.mobileNumber)
+            val newGst = PhoneUtil.normalizeGst(newAccount.gstNumber)
+            val accountMap = hashMapOf<String, Any>(
+                "accountId" to newAccount.accountId,
+                "jewellerName" to newAccount.jewellerName.trim(),
+                "mobileNumber" to newMob,
+                "code4Digit" to PhoneUtil.normalizeCode(newAccount.code4Digit),
+                "gstNumber" to newGst,
+                "isLicensed" to newAccount.isLicensed,
+                "status" to newAccount.status,
+                "createdAt" to newAccount.createdAt
+            )
+            val batch = fs.batch()
+            batch.set(fs.collection("jeweller_accounts").document(newAccount.accountId), accountMap, SetOptions.merge())
+            if (oldMob.isNotEmpty() && oldMob != newMob) batch.delete(fs.collection("jeweller_accounts_by_mobile").document(oldMob))
+            if (oldGst.isNotEmpty() && oldGst != newGst) batch.delete(fs.collection("jeweller_accounts_by_gst").document(oldGst))
+            if (oldMob.isNotEmpty() && oldGst.isNotEmpty() && (oldMob != newMob || oldGst != newGst)) {
+                batch.delete(fs.collection("jeweller_accounts_by_identity").document("${oldMob}_${oldGst}"))
+            }
+            if (newMob.isNotEmpty()) batch.set(fs.collection("jeweller_accounts_by_mobile").document(newMob), accountMap, SetOptions.merge())
+            if (newGst.isNotEmpty()) batch.set(fs.collection("jeweller_accounts_by_gst").document(newGst), accountMap, SetOptions.merge())
+            if (newMob.isNotEmpty() && newGst.isNotEmpty()) {
+                batch.set(fs.collection("jeweller_accounts_by_identity").document("${newMob}_${newGst}"), accountMap, SetOptions.merge())
+            }
+            batch.commit().await()
+            saveAccountToPersistentMirror(newAccount)
+            _syncStatus.value = SyncStatus.SYNCED
+            _lastSyncTimestamp.value = System.currentTimeMillis()
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "replaceAccountIdentityInCloud failed: " + e.message)
+            _syncStatus.value = SyncStatus.ERROR
+            false
+        }
+    }
+
+    /**
      * Retrieves accounts cached locally on disk/SharedPreferences without network calls
      */
     fun getLocalMirroredAccounts(): List<JewellerAccount> {
