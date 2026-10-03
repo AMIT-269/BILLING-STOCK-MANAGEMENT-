@@ -798,11 +798,31 @@ class ExampleRobolectricTest {
     println("2B3-C2: register complete")
 
     println("2B3-C3: before identity update")
-    val changed = repo.updateAccountIdentityAndProfile(
-      jewellerName = "Amit Gold Jewellers",
-      mobileNumber = newMobile,
-      gstNumber = newGst
-    )
+    val watchdog = Thread {
+      try {
+        Thread.sleep(15_000)
+        println("2B3-WATCHDOG: identity update still blocked after 15s")
+        Thread.getAllStackTraces().forEach { (thread, stack) ->
+          println("2B3-THREAD: ${thread.name} state=${thread.state}")
+          stack.take(20).forEach { frame -> println("    at $frame") }
+        }
+      } catch (_: InterruptedException) {
+        // Identity update completed before the diagnostic watchdog fired.
+      }
+    }.apply {
+      isDaemon = true
+      name = "2B3-identity-watchdog"
+      start()
+    }
+    val changed = try {
+      repo.updateAccountIdentityAndProfile(
+        jewellerName = "Amit Gold Jewellers",
+        mobileNumber = newMobile,
+        gstNumber = newGst
+      )
+    } finally {
+      watchdog.interrupt()
+    }
     println("2B3-C4: identity update complete")
     assertTrue("Identity change should succeed", changed.isSuccess)
   }
