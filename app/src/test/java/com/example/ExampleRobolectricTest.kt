@@ -18,6 +18,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ExampleRobolectricTest {
+  private fun uniqueTestMobile(): String {
+    val n = kotlin.math.abs(System.nanoTime()) % 900000000L + 100000000L
+    return n.toString()
+  }
+
 
   @Test
   fun `mobile normalization accepts exact 10 digits and common prefixes`() {
@@ -56,11 +61,12 @@ class ExampleRobolectricTest {
     com.example.ui.locale.LanguageManager.globalLanguage = com.example.ui.locale.AppLanguage.ENGLISH
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
+    val mobile = uniqueTestMobile()
 
     // 1. Invalid licence code during registration must fail
     val invalidLicenceRes = repo.registerNewJeweller(
       name = "Shiv Jewellers",
-      mobile = "9876543210",
+      mobile = mobile,
       code = "1234",
       confirmCode = "1234",
       licenceCode = "9999",
@@ -73,7 +79,7 @@ class ExampleRobolectricTest {
     // 2. Valid licence code registration must succeed
     val regSuccess = repo.registerNewJeweller(
       name = "Shiv Jewellers",
-      mobile = "9876543210",
+      mobile = mobile,
       code = "1234",
       confirmCode = "1234",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
@@ -83,7 +89,7 @@ class ExampleRobolectricTest {
 
     // 3. Login with correct credentials must succeed (Licence code 2330 NOT needed!)
     val loginSuccess = repo.login(
-      mobile = "9876543210",
+      mobile = mobile,
       gstNumber = "24AAAAA0000A1Z5",
       code = "1234"
     )
@@ -92,7 +98,7 @@ class ExampleRobolectricTest {
 
     // 4. Incorrect 4-digit code must return exact message "4 Digit Code ખોટો છે."
     val wrongCodeLogin = repo.login(
-      mobile = "9876543210",
+      mobile = mobile,
       gstNumber = "24AAAAA0000A1Z5",
       code = "9999"
     )
@@ -102,7 +108,7 @@ class ExampleRobolectricTest {
 
     // 5. Wrong GST with existing mobile must return error
     val wrongGstLogin = repo.login(
-      mobile = "9876543210",
+      mobile = mobile,
       gstNumber = "24BBBBB0000B1Z5",
       code = "1234"
     )
@@ -132,7 +138,7 @@ class ExampleRobolectricTest {
 
     // 8. Forgot Password can reset code without licence code
     val resetRes = repo.resetPassword(
-      mobile = "9876543210",
+      mobile = mobile,
       gstNumber = "24AAAAA0000A1Z5",
       newCode = "5678",
       confirmCode = "5678"
@@ -141,7 +147,7 @@ class ExampleRobolectricTest {
 
     // 9. Login with new code succeeds
     val loginWithNewCode = repo.login(
-      mobile = "9876543210",
+      mobile = mobile,
       gstNumber = "24AAAAA0000A1Z5",
       code = "5678"
     )
@@ -152,13 +158,14 @@ class ExampleRobolectricTest {
   fun `verify registration login forgot password with GST number and change code`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
+    val mobile = uniqueTestMobile()
 
     val gstNumber = "24AAAAA0000A1Z5"
 
     // Register with GST
     val regRes = repo.registerNewJeweller(
       name = "Ganesh Jewellers",
-      mobile = "9988776655",
+      mobile = mobile,
       code = "4321",
       confirmCode = "4321",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
@@ -171,7 +178,7 @@ class ExampleRobolectricTest {
     // Login with GST
     val loginRes = repo.login(
       name = "Ganesh Jewellers",
-      mobile = "9988776655",
+      mobile = mobile,
       gstNumber = gstNumber,
       code = "4321"
     )
@@ -180,7 +187,7 @@ class ExampleRobolectricTest {
     // Login with wrong GST fails
     val loginWrongGst = repo.login(
       name = "Ganesh Jewellers",
-      mobile = "9988776655",
+      mobile = mobile,
       gstNumber = "24WRONGGST00000",
       code = "4321"
     )
@@ -189,7 +196,7 @@ class ExampleRobolectricTest {
     // Reset password with GST
     val resetRes = repo.resetPassword(
       name = "Ganesh Jewellers",
-      mobile = "9988776655",
+      mobile = mobile,
       gstNumber = gstNumber,
       newCode = "8888",
       confirmCode = "8888"
@@ -199,7 +206,7 @@ class ExampleRobolectricTest {
     // Login with new code 8888
     val loginAfterReset = repo.login(
       name = "Ganesh Jewellers",
-      mobile = "9988776655",
+      mobile = mobile,
       gstNumber = gstNumber,
       code = "8888"
     )
@@ -216,7 +223,7 @@ class ExampleRobolectricTest {
     // Verify login with 9999
     val loginAfterChange = repo.login(
       name = "Ganesh Jewellers",
-      mobile = "9988776655",
+      mobile = mobile,
       gstNumber = gstNumber,
       code = "9999"
     )
@@ -262,11 +269,12 @@ class ExampleRobolectricTest {
   fun `verify customer sale and karigar purchase bill numbering with jeweller initials and sequential digits`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
+    val mobile = uniqueTestMobile()
 
     // Register a jeweller named "Amit Jewellers"
     val regRes = repo.registerNewJeweller(
       name = "Amit Jewellers",
-      mobile = "9900112233",
+      mobile = mobile,
       code = "1122",
       confirmCode = "1122",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
@@ -314,7 +322,7 @@ class ExampleRobolectricTest {
     val repo1 = JewelleryRepository(context)
 
     val shopName = "Mahalaxmi Jewellers"
-    val mobile = "9825012345"
+    val mobile = uniqueTestMobile()
     val code = "5566"
     val gst = "24ABCDE1234F1Z5"
 
@@ -378,7 +386,7 @@ class ExampleRobolectricTest {
     val repo = JewelleryRepository(context)
 
     val shopName = "Ambica Jewellers"
-    val mobile = "9898123456"
+    val mobile = uniqueTestMobile()
     val code = "1234"
     val gst = "24AABCA1234A1Z5"
 
@@ -499,11 +507,12 @@ class ExampleRobolectricTest {
   fun `verify bill update does not duplicate bill or stock records`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
+    val mobile = uniqueTestMobile()
     val db = com.example.data.local.AppDatabase.getDatabase(context)
 
     val regRes = repo.registerNewJeweller(
       name = "Sardar Jewellers",
-      mobile = "9824055555",
+      mobile = mobile,
       code = "3344",
       confirmCode = "3344",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
@@ -569,7 +578,7 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
 
-    val mobile = "9876500001"
+    val mobile = uniqueTestMobile()
     val gstA = "24AAAAA1111A1Z1"
     val gstB = "24BBBBB2222B2Z2"
 
@@ -625,7 +634,7 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
 
-    val mobile = "9876500002"
+    val mobile = uniqueTestMobile()
     val gst = "24CCCCC3333C3Z3"
 
     val reg = repo.registerNewJeweller(
@@ -652,6 +661,7 @@ class ExampleRobolectricTest {
   fun `verify same jeweller name with different mobile and GST creates separate accounts and preserves bills across sessions`() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
+    val mobile = uniqueTestMobile()
     val db = com.example.data.local.AppDatabase.getDatabase(context)
 
     val shopName = "Kalyan Jewellers"
@@ -659,7 +669,7 @@ class ExampleRobolectricTest {
     // Account 1
     val reg1 = repo.registerNewJeweller(
       name = shopName,
-      mobile = "9876500003",
+      mobile = mobile,
       code = "1234",
       confirmCode = "1234",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
@@ -671,7 +681,7 @@ class ExampleRobolectricTest {
     // Account 2 (same name, different branch)
     val reg2 = repo.registerNewJeweller(
       name = shopName,
-      mobile = "9876500004",
+      mobile = uniqueTestMobile(),
       code = "5678",
       confirmCode = "5678",
       licenceCode = LicenceValidator.OWNER_LICENCE_CODE,
@@ -699,7 +709,7 @@ class ExampleRobolectricTest {
 
     // Logout and log back in as Account 1
     repo.logout()
-    val login1 = repo.login("9876500003", "24DDDDD4444D4Z4", "1234")
+    val login1 = repo.login(mobile, "24DDDDD4444D4Z4", "1234")
     assertTrue(login1 is AuthResult.Success)
 
     // Bills for Account 1 must be present
