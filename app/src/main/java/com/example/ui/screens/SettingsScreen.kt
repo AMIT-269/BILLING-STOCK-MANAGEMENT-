@@ -58,14 +58,14 @@ fun SettingsScreen(
     var deleteConfirmCode by remember { mutableStateOf("") }
     var deleteError by remember { mutableStateOf<String?>(null) }
 
-    var jewellerName by remember(settings) { mutableStateOf(settings?.jewellerName ?: account?.jewellerName ?: "") }
-    var address by remember(settings) { mutableStateOf(settings?.address ?: "") }
-    var gstNumber by remember(settings) { mutableStateOf(settings?.gstNumber ?: "") }
-    var contactNumber by remember(settings) { mutableStateOf(settings?.contactNumber ?: account?.mobileNumber ?: "") }
-    var goldHsnCode by remember(settings) { mutableStateOf(settings?.goldHsnCode ?: "") }
-    var silverHsnCode by remember(settings) { mutableStateOf(settings?.silverHsnCode ?: "") }
+    var jewellerName by remember(account?.accountId) { mutableStateOf(settings?.jewellerName ?: account?.jewellerName ?: "") }
+    var address by remember(account?.accountId) { mutableStateOf(settings?.address ?: "") }
+    var gstNumber by remember(account?.accountId) { mutableStateOf(settings?.gstNumber ?: "") }
+    var contactNumber by remember(account?.accountId) { mutableStateOf(settings?.contactNumber ?: account?.mobileNumber ?: "") }
+    var goldHsnCode by remember(account?.accountId) { mutableStateOf(settings?.goldHsnCode ?: "") }
+    var silverHsnCode by remember(account?.accountId) { mutableStateOf(settings?.silverHsnCode ?: "") }
     var currentLogoBase64 by remember(account?.accountId) { mutableStateOf(settings?.logoBase64) }
-    var selectedLanguage by remember(settings) { mutableStateOf(settings?.language ?: "en") }
+    var selectedLanguage by remember(account?.accountId) { mutableStateOf(settings?.language ?: "en") }
 
     // Google Play Policy compliant zero-permission Photo Picker
     val photoPickerLauncher = rememberLauncherForActivityResult(
