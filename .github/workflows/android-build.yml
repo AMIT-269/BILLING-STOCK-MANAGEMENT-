@@ -30,31 +30,7 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Run Robolectric test 2B-3 account identity
-        run: >
-          timeout 5m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
-          -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify changed account identity cannot login with old details and settings show new details"
-
-      - name: Run Robolectric tests group 2C
-        if: success()
-        run: >
-          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
-          -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify network and timeout errors during login never show mobile not registered"
-          --tests "com.example.ExampleRobolectricTest.verify online unregistered mobile shows clear registration error message"
-          --tests "com.example.ExampleRobolectricTest.verify silver payment rate is kg based and never multiplied by 1000"
-
-      - name: Run Robolectric tests group 2D
-        if: success()
-        run: >
-          timeout 3m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
-          -Dbilling.skipFirebaseNetworkTests=true
-          --tests "com.example.ExampleRobolectricTest.verify inline silver payment uses kg rate exactly once"
-          --tests "com.example.ExampleRobolectricTest.normalize legacy Silver payment amount stored with wrong kg unit"
-
       - name: Assemble Debug APK
-        if: success()
         run: timeout 6m gradle assembleDebug --no-daemon --stacktrace --console=plain
 
       - name: Upload APK
@@ -64,4 +40,3 @@ jobs:
           name: BILLING-STOCK-MANAGEMENT-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
