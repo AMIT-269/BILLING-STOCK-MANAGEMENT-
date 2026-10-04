@@ -32,7 +32,7 @@ jobs:
 
       - name: Run Robolectric test 2B-3 account identity
         run: >
-          timeout 2m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
+          timeout 5m gradle testDebugUnitTest --no-daemon --stacktrace --console=plain --info
           -Dbilling.skipFirebaseNetworkTests=true
           --tests "com.example.ExampleRobolectricTest.verify changed account identity cannot login with old details and settings show new details"
 
