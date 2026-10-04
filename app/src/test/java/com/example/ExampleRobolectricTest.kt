@@ -770,6 +770,10 @@ class ExampleRobolectricTest {
 
   @Test
   fun `verify changed account identity cannot login with old details and settings show new details`() = runBlocking {
+    // Robolectric starts this test in a worker JVM. Set the CI guard before
+    // creating Application/Repository singletons so CloudSyncManager cannot
+    // start Firebase/WorkManager background infrastructure during the test.
+    System.setProperty("billing.skipFirebaseNetworkTests", "true")
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repo = JewelleryRepository(context)
 
