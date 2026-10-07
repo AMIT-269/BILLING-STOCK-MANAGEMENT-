@@ -224,110 +224,21 @@ object BillShareHelper {
         return sb.toString()
     }
 
-    fun shareBillText(context: Context, bill: Bill, settings: JewellerSettings?) {
-        val text = generateFormattedBillText(bill, settings)
-        val lines = text.trimEnd().split("\n").flatMap { raw ->
-            if (raw.isEmpty()) listOf("") else wrapForShareImage(raw, 32)
-        }
-
-        val width = 480
-        val horizontalPadding = 24f
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.BLACK
-            textSize = 20f
-            typeface = Typeface.MONOSPACE
-        }
-        val lineHeight = 29f
-        val topBottom = 28f
-
-        fun isSeparator(line: String): Boolean =
-            line.isNotEmpty() && line.all { it == '-' }
-
-        fun isCenteredLine(line: String): Boolean {
-            val upper = line.uppercase(Locale.US)
-            return line.length <= 30 && (
-                upper.contains("TAX INVOICE") ||
-                upper.contains("RETAIL INVOICE") ||
-                upper.contains("KARIGAR PURCHASE") ||
-                upper == "PAYMENT DETAILS:"
-            )
-        }
-
-        fun isRightAlignedLine(line: String): Boolean {
-            val upper = line.uppercase(Locale.US)
-            return upper.startsWith("SUBTOTAL:") ||
-                upper.startsWith("CGST ") ||
-                upper.startsWith("SGST ") ||
-                upper.startsWith("CST ") ||
-                upper.startsWith("DISCOUNT:") ||
-                upper.startsWith("OLD GOLD EXCH:") ||
-                upper.startsWith("OTHER CHARGES") ||
-                upper.startsWith("OTHER:") ||
-                upper.startsWith("GRAND TOTAL:") ||
-                upper.startsWith("TOTAL RECEIVED:") ||
-                upper.startsWith("TOTAL PAID:") ||
-                upper.startsWith("BALANCE DUE:")
-        }
-
-        val height = (topBottom * 2 + lineHeight * lines.size + 8f).toInt().coerceAtLeast(140)
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        var y = topBottom + 20f
-        for (line in lines) {
-            val drawLine = line.take(32)
-            if (drawLine.isBlank()) {
-                y += lineHeight
-                continue
-            }
-
-            when {
-                isSeparator(drawLine) -> {
-                    paint.textSize = 18f
-                    paint.typeface = Typeface.MONOSPACE
-                    canvas.drawText("--------------------------------", horizontalPadding, y, paint)
-                }
-                isCenteredLine(drawLine) -> {
-                    paint.textSize = 20f
-                    paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-                    val measured = paint.measureText(drawLine)
-                    canvas.drawText(drawLine, (width - measured) / 2f, y, paint)
-                }
-                drawLine.equals(shopNameForShare(settings), ignoreCase = false) -> {
-                    paint.textSize = 24f
-                    paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-                    val measured = paint.measureText(drawLine)
-                    canvas.drawText(drawLine, (width - measured) / 2f, y, paint)
-                }
-                isRightAlignedLine(drawLine) -> {
-                    paint.textSize = 19f
-                    paint.typeface = if (
-                        drawLine.uppercase(Locale.US).contains("GRAND TOTAL") ||
-                        drawLine.uppercase(Locale.US).contains("BALANCE DUE") ||
-                        drawLine.uppercase(Locale.US).contains("TOTAL RECEIVED") ||
-                        drawLine.uppercase(Locale.US).contains("TOTAL PAID")
-                    ) Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) else Typeface.MONOSPACE
-                    val measured = paint.measureText(drawLine)
-                    canvas.drawText(drawLine, (width - horizontalPadding - measured).coerceAtLeast(horizontalPadding), y, paint)
-                }
-                else -> {
-                    paint.textSize = 19f
-                    paint.typeface = Typeface.MONOSPACE
-                    canvas.drawText(drawLine, horizontalPadding, y, paint)
-                }
-            }
-            y += lineHeight
-        }
-
+    /**
+     * Shares the exact rendered Bill Preview as a PNG image.
+     * The bitmap is captured from the same Compose Card that the user sees,
+     * so WhatsApp gets the designed preview instead of the old plain-text receipt.
+     */
+    fun shareBillImage(context: Context, bill: Bill, bitmap: Bitmap) {
         val shareDir = File(context.cacheDir, "shared_bills")
         if (!shareDir.exists()) shareDir.mkdirs()
+
         val safeBillNumber = bill.billNumber.replace(Regex("[^A-Za-z0-9_-]"), "_")
-        val file = File(shareDir, "bill_$safeBillNumber.png")
+        val file = File(shareDir, "bill_${safeBillNumber}.png")
         FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.flush()
         }
-        bitmap.recycle()
 
         val uri: Uri = FileProvider.getUriForFile(
             context,
@@ -341,6 +252,7 @@ object BillShareHelper {
             putExtra(Intent.EXTRA_SUBJECT, "Jewellery Bill ${bill.billNumber}")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+
         context.startActivity(
             Intent.createChooser(
                 intent,
@@ -348,7 +260,6 @@ object BillShareHelper {
             )
         )
     }
-
     private fun shopNameForShare(settings: JewellerSettings?): String =
         settings?.jewellerName?.ifBlank { "JEWELLERY SHOP" } ?: "JEWELLERY SHOP"
 
