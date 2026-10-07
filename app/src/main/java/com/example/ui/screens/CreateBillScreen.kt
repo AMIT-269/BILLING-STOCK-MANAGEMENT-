@@ -348,12 +348,12 @@ fun CreateBillScreen(
             }
 
             item {
-                // Per-Bill GST / CST Selection Card with manual change option
+                // Per-Bill GST Selection Card with manual change option
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isGstBill || isCstBill) GoldLight.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface
+                        containerColor = if (isGstBill) GoldLight.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface
                     ),
                     border = if (isGstBill || isCstBill) androidx.compose.foundation.BorderStroke(1.5.dp, GoldDark) else null
                 ) {
@@ -382,8 +382,7 @@ fun CreateBillScreen(
                                 checked = isGstBill,
                                 onCheckedChange = {
                                     isGstBill = it
-                                    if (it) isCstBill = false
-                                },
+                                                                    },
                                 modifier = Modifier.testTag("gst_toggle_switch")
                             )
                         }
@@ -660,10 +659,6 @@ fun CreateBillScreen(
                             val halfGst = gstAmount / 2.0
                             BillCalcRow("${AppStrings.cgst()} (${LanguageManager.formatDouble(cgstRate, 1)}%):", LanguageManager.formatCurrency(halfGst))
                             BillCalcRow("${AppStrings.sgst()} (${LanguageManager.formatDouble(sgstRate, 1)}%):", LanguageManager.formatCurrency(halfGst))
-                        }
-
-                        if (isCstBill) {
-                            BillCalcRow("${AppStrings.cst()} (${LanguageManager.formatDouble(cstRate, 1)}%):", LanguageManager.formatCurrency(cstAmount))
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
