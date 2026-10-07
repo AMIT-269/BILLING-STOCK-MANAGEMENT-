@@ -345,13 +345,14 @@ fun BillPreviewScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState())
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Receipt Container Card (Exact visual photo style)
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .requiredWidth(920.dp)
                         .border(1.dp, Color(0xFFD0D7DE), RoundedCornerShape(12.dp))
                         .drawWithContent {
                             billGraphicsLayer.record {
