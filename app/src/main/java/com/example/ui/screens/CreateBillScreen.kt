@@ -55,10 +55,8 @@ fun CreateBillScreen(
 
     var billType by remember { mutableStateOf(initialBillType ?: "SALE") } // "SALE" or "KARIGAR_PURCHASE"
     var isGstBill by remember { mutableStateOf(false) }
-    var isCstBill by remember { mutableStateOf(false) }
     var sgstPercentText by remember { mutableStateOf("1.5") }
     var cgstPercentText by remember { mutableStateOf("1.5") }
-    var cstPercentText by remember { mutableStateOf("1.5") }
 
     var billNumber by remember { mutableStateOf("") }
     var partyName by remember { mutableStateOf("") }
@@ -107,11 +105,9 @@ fun CreateBillScreen(
             if (b != null) {
                 billType = b.billType
                 isGstBill = b.isGstBill
-                isCstBill = b.isCstBill
                 val halfGst = if (b.gstPercent > 0) b.gstPercent / 2.0 else 1.5
                 sgstPercentText = LanguageManager.formatDouble(halfGst, 1)
                 cgstPercentText = LanguageManager.formatDouble(halfGst, 1)
-                cstPercentText = if (b.cstPercent > 0) LanguageManager.formatDouble(b.cstPercent, 1) else "1.5"
 
                 billNumber = b.billNumber
                 partyName = b.partyName
@@ -193,12 +189,10 @@ fun CreateBillScreen(
     val totalGstPercent = sgstRate + cgstRate
     val gstAmount = if (isGstBill) (subtotal * totalGstPercent / 100.0) else 0.0
 
-    val cstRate = if (isCstBill) (cstPercentText.toDoubleOrNull() ?: 1.5) else 0.0
-    val cstAmount = if (isCstBill) (subtotal * cstRate / 100.0) else 0.0
 
     val discount = discountText.toDoubleOrNull() ?: 0.0
     val oldMetal = oldMetalExchangeText.toDoubleOrNull() ?: 0.0
-    val grandTotal = (subtotal + gstAmount + cstAmount - discount - oldMetal).coerceAtLeast(0.0)
+    val grandTotal = (subtotal + gstAmount - discount - oldMetal).coerceAtLeast(0.0)
 
     val totalPaidFromPayments = payments.sumOf { it.amount }
     val cashReceivedOrPaid = if (payments.isNotEmpty()) totalPaidFromPayments else (cashReceivedOrPaidText.toDoubleOrNull() ?: 0.0)
@@ -424,52 +418,7 @@ fun CreateBillScreen(
 
                         Divider(modifier = Modifier.padding(vertical = 2.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                        // CST Toggle
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = loc(en = "CST Bill", gu = "સીએસટી બિલ (CST)"),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = if (isCstBill) GoldDark else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = loc(en = "Interstate trade CST bill (auto 1.5% or custom)", gu = "અન્ય રાજ્ય વેપાર માટે સીએસટી બિલ (ઓટો 1.5% અથવા કસ્ટમ)"),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = isCstBill,
-                                onCheckedChange = {
-                                    isCstBill = it
-                                    if (it) isGstBill = false
-                                },
-                                modifier = Modifier.testTag("cst_toggle_switch")
-                            )
-                        }
 
-                        // When CST enabled: Editable CST rate (auto set 1.5% with manual change option)
-                        if (isCstBill) {
-                            OutlinedTextField(
-                                value = cstPercentText,
-                                onValueChange = { cstPercentText = it },
-                                label = { Text("${AppStrings.cst()} %") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Text(
-                                text = "${loc(en = "CST Amount", gu = "સીએસટી રકમ")}: ${LanguageManager.formatCurrency(cstAmount)}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = GoldDark
-                            )
-                        }
                     }
                 }
             }
@@ -1352,9 +1301,6 @@ fun CreateBillScreen(
                             isGstBill = isGstBill,
                             gstPercent = totalGstPercent,
                             gstAmount = gstAmount,
-                            isCstBill = isCstBill,
-                            cstPercent = cstRate,
-                            cstAmount = cstAmount,
                             partyName = partyName.trim(),
                             partyMobile = partyMobile.trim(),
                             partyAddress = partyAddress.trim(),
