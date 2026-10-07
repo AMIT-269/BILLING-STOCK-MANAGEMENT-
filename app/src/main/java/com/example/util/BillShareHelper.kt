@@ -8,168 +8,132 @@ import com.example.ui.locale.LanguageManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 object BillShareHelper {
-
     fun generateFormattedBillText(bill: Bill, settings: JewellerSettings?): String {
-        val isGu = LanguageManager.isGujarati()
         val sb = StringBuilder()
-        val shopName = settings?.jewellerName?.ifBlank {
-            if (isGu) "ઝવેરી શોપ" else "JEWELLERY SHOP"
-        } ?: if (isGu) "ઝવેરી શોપ" else "JEWELLERY SHOP"
-
-        sb.append("✨ *$shopName* ✨\n")
-        if (!settings?.address.isNullOrBlank()) {
-            sb.append("${settings!!.address}\n")
-        }
-        if (!settings?.contactNumber.isNullOrBlank()) {
-            sb.append("${if (isGu) "ફોન" else "Ph"}: ${settings!!.contactNumber}\n")
-        }
-
-        // GST number only if GST Bill
-        if (bill.isGstBill && !settings?.gstNumber.isNullOrBlank()) {
-            sb.append("GSTIN: *${settings!!.gstNumber}*\n")
-        }
-
-        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
-        val invoiceTitle = if (bill.billType == "SALE") {
-            if (bill.isGstBill) {
-                if (isGu) "ટેક્સ ઇન્વોઇસ (GST વેચાણ)" else "TAX INVOICE (GST SALE)"
-            } else {
-                if (isGu) "રિટેલ ઇન્વોઇસ" else "RETAIL INVOICE"
-            }
+        fun line(value: String = "") { sb.append(value).append("\n") }
+        val shopName = settings?.jewellerName?.ifBlank { "JEWELLERY SHOP" } ?: "JEWELLERY SHOP"
+        line(shopName)
+        if (!settings?.address.isNullOrBlank()) line(settings!!.address)
+        if (!settings?.contactNumber.isNullOrBlank()) line("Ph: ${settings!!.contactNumber}")
+        if (bill.isGstBill && !settings?.gstNumber.isNullOrBlank()) line("GSTIN: ${settings!!.gstNumber}")
+        line("--------------------------------")
+        val title = if (bill.billType == "SALE") {
+            if (bill.isGstBill) "TAX INVOICE (GST SALE)" else if (bill.isCstBill) "TAX INVOICE (CST SALE)" else "RETAIL INVOICE (NON-GST)"
         } else {
-            if (bill.isGstBill) {
-                if (isGu) "કારીગર ખરીદી (GST)" else "KARIGAR PURCHASE (GST)"
-            } else {
-                if (isGu) "કારીગર ખરીદી" else "KARIGAR PURCHASE"
-            }
+            if (bill.isGstBill) "KARIGAR PURCHASE (GST)" else if (bill.isCstBill) "KARIGAR PURCHASE (CST)" else "KARIGAR PURCHASE (NON-GST)"
         }
-        sb.append("📄 *$invoiceTitle*\n")
-        val sdf = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.US)
-        sb.append("${if (isGu) "બિલ નં." else "Bill No"}: *${bill.billNumber}*\n")
-        sb.append("${if (isGu) "તારીખ" else "Date"}: ${sdf.format(Date(bill.dateTimestamp))}\n")
-
-        val partyLabel = if (bill.billType == "SALE") {
-            if (isGu) "ગ્રાહક" else "Customer"
-        } else {
-            if (isGu) "કારીગર" else "Karigar"
+        line(title)
+        line("Bill No: ${bill.billNumber}")
+        val sdf = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.US).apply { timeZone = TimeZone.getTimeZone("Asia/Kolkata") }
+        line("Date   : ${sdf.format(Date(bill.dateTimestamp))}")
+        val partyLabel = if (bill.billType == "SALE") "Customer" else "Karigar"
+        if (bill.partyName.isNotBlank()) line("$partyLabel: ${bill.partyName}")
+        if (bill.partyMobile.isNotBlank()) line("Mobile  : ${bill.partyMobile}")
+        if (bill.partyAddress.isNotBlank()) line("Address : ${bill.partyAddress}")
+        if (bill.partyAadharNumber.isNotBlank()) line("Aadhaar : ${bill.partyAadharNumber}")
+        if (bill.partyPanNumber.isNotBlank()) line("PAN     : ${bill.partyPanNumber}")
+        if (bill.partyGstNumber.isNotBlank()) line("GST No. : ${bill.partyGstNumber}")
+        if (bill.billType == "SALE") {
+            val saleItems = bill.parseItems()
+            if (saleItems.any { it.metalType.equals("GOLD", true) } && !settings?.goldHsnCode.isNullOrBlank()) line("Gold HSN : ${settings!!.goldHsnCode}")
+            if (saleItems.any { it.metalType.equals("SILVER", true) } && !settings?.silverHsnCode.isNullOrBlank()) line("Silver HSN: ${settings!!.silverHsnCode}")
         }
-        if (bill.partyName.isNotBlank()) {
-            sb.append("$partyLabel: *${bill.partyName}*\n")
-        }
-        if (bill.partyMobile.isNotBlank()) {
-            sb.append("${if (isGu) "મોબાઈલ" else "Mobile"}: ${bill.partyMobile}\n")
-        }
-
-        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
-        sb.append(if (isGu) "*દાગીનાની વિગત:*\n" else "*ITEMS:*\n")
-
+        line("--------------------------------")
+        line(String.format(Locale.US, "%-13s|%6s|%11s", "Item/Purity", "Wt(g)", "Total(Rs)"))
+        line("--------------------------------")
         val items = bill.parseItems()
-        for ((idx, item) in items.withIndex()) {
-            val wt = if (item.netWeight > 0) item.netWeight else item.grossWeight
-            val wtUnit = if (isGu) "ગ્રામ" else "g"
-            val metalLabel = if (item.metalType == "GOLD") {
-                if (isGu) "સોનું" else "Gold"
-            } else {
-                if (isGu) "ચાંદી" else "Silver"
-            }
-            sb.append("${idx + 1}. *${item.description}* ($metalLabel)\n")
-            if (item.metalType == "SILVER") {
+        val goldOnly = items.isNotEmpty() && items.all { it.metalType.equals("GOLD", true) }
+        val silverOnly = items.isNotEmpty() && items.all { it.metalType.equals("SILVER", true) }
+        val karigarGold = bill.billType == "KARIGAR_PURCHASE" && goldOnly
+        items.forEachIndexed { index, item ->
+            if (karigarGold) {
+                val purity = if (item.purity.isNotBlank()) "Gold / ${item.purity}" else "Gold"
+                line(String.format(Locale.US, "%d | %s | %s", index + 1, item.description.take(14), purity.take(18)))
+                line(String.format(Locale.US, "  Labour: %.1f%% | Gross: %.3fg | Net: %.3fg", item.makingChargePercent, item.grossWeight, item.netWeight))
+                line(String.format(Locale.US, "  Fine Gold: %.3fg | Gold Rate: Rs. %.0f/g", item.totalFine, item.ratePerGram))
+                line(String.format(Locale.US, "  Amount: Rs. %.2f", item.itemTotal))
+            } else if (silverOnly) {
                 val silverPrice = item.netWeight * (item.ratePerGram / 1000.0)
                 val labour = silverPrice * item.makingChargePercent / 100.0 + item.makingCharges
-                sb.append("   Gross: ${LanguageManager.formatDouble(item.grossWeight, 3)}g | Net: ${LanguageManager.formatDouble(item.netWeight, 3)}g\n")
-                sb.append("   Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/kg | Silver Price: ${LanguageManager.formatCurrency(silverPrice)}\n")
-                sb.append("   Labour (AUTO): ${LanguageManager.formatCurrency(labour)} | Total Amount: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
+                line(String.format(Locale.US, "%d | %s | Silver", index + 1, item.description.take(14)))
+                line(String.format(Locale.US, "  Gross: %.3fg | Net: %.3fg | Rate: Rs. %.0f/kg", item.grossWeight, item.netWeight, item.ratePerGram))
+                line(String.format(Locale.US, "  Silver Price: Rs. %.2f | Labour (AUTO): Rs. %.2f", silverPrice, labour))
+                line(String.format(Locale.US, "  Total Amount: Rs. %.2f", item.itemTotal))
+            } else if (goldOnly) {
+                val purity = if (item.purity.isNotBlank()) "Gold / ${item.purity}" else "Gold"
+                val goldAmount = item.netWeight * item.ratePerGram
+                val labour = if (item.makingCharges > 0) item.makingCharges else goldAmount * item.makingChargePercent / 100.0
+                line(String.format(Locale.US, "%d | %s | %s", index + 1, item.description.take(14), purity.take(18)))
+                line(String.format(Locale.US, "  Gross: %.3fg | Net: %.3fg | Rate: Rs. %.0f/g", item.grossWeight, item.netWeight, item.ratePerGram))
+                line(String.format(Locale.US, "  Gold Amount: Rs. %.2f | Labour: Rs. %.2f", goldAmount, labour))
+                line(String.format(Locale.US, "  Total Amount: Rs. %.2f", item.itemTotal))
             } else {
-                val puritySuffix = if (item.purity.isNotBlank()) " - ${item.purity}" else ""
-                sb.append("   Wt: ${LanguageManager.formatDouble(wt, 3)}$wtUnit | Rate: ₹${LanguageManager.formatDouble(item.ratePerGram, 0)}/${if (isGu) "ગ્રામ" else "g"}$puritySuffix\n")
-                if (item.currentTouch > 0 || item.makingChargePercent > 0) {
-                    sb.append("   Touch: ${LanguageManager.formatDouble(item.currentTouch, 1)}% + ${LanguageManager.formatDouble(item.makingChargePercent, 1)}% = ${LanguageManager.formatDouble(item.totalTouch, 1)}% | Fine: ${LanguageManager.formatDouble(item.totalFine, 3)}$wtUnit\n")
-                }
-                if (item.makingCharges > 0) sb.append("   Making: ${LanguageManager.formatCurrency(item.makingCharges)}\n")
-                sb.append("   Total: *${LanguageManager.formatCurrency(item.itemTotal)}*\n")
+                val purityTag = if (item.purity.isNotBlank()) " ${item.purity}" else ""
+                val namePurity = "${item.description}${purityTag}".take(14)
+                val wt = String.format(Locale.US, "%.3f", if (item.netWeight > 0) item.netWeight else item.grossWeight)
+                val total = String.format(Locale.US, "%.2f", item.itemTotal)
+                line(String.format(Locale.US, "%-13s|%6s|%11s", namePurity, wt, total))
             }
         }
-
-        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
-        sb.append("${if (isGu) "પેટા કુલ" else "Subtotal"}: ${LanguageManager.formatCurrency(bill.subtotal)}\n")
-
+        line("--------------------------------")
+        line(String.format(Locale.US, "Subtotal: Rs. %.2f", bill.subtotal))
         if (bill.isGstBill) {
             val halfGst = bill.gstAmount / 2.0
             val halfPercent = bill.gstPercent / 2.0
-            sb.append("CGST (${LanguageManager.formatDouble(halfPercent, 1)}%): ${LanguageManager.formatCurrency(halfGst)}\n")
-            sb.append("SGST (${LanguageManager.formatDouble(halfPercent, 1)}%): ${LanguageManager.formatCurrency(halfGst)}\n")
-        } else if (bill.isCstBill) {
-            sb.append("CST (${LanguageManager.formatDouble(bill.cstPercent, 1)}%): ${LanguageManager.formatCurrency(bill.cstAmount)}\n")
+            line(String.format(Locale.US, "CGST (%.1f%%): Rs. %.2f", halfPercent, halfGst))
+            line(String.format(Locale.US, "SGST (%.1f%%): Rs. %.2f", halfPercent, halfGst))
+        } else if (bill.isCstBill) line(String.format(Locale.US, "CST (%.1f%%): Rs. %.2f", bill.cstPercent, bill.cstAmount))
+        if (bill.discount > 0) line(String.format(Locale.US, "Discount: Rs. -%.2f", bill.discount))
+        if (bill.oldMetalExchangeAmount > 0) line(String.format(Locale.US, "Old Gold Exch: Rs. -%.2f", bill.oldMetalExchangeAmount))
+        if (bill.otherCharges > 0 || bill.otherChargesRemark.isNotBlank()) {
+            val otherLines = bill.otherChargesRemark.lines().mapNotNull { entry ->
+                val parts = entry.split("|", limit = 2)
+                if (parts.size == 2 && parts[0].isNotBlank()) parts[0].trim() to (parts[1].trim().toDoubleOrNull() ?: 0.0) else null
+            }
+            if (otherLines.isNotEmpty()) {
+                otherLines.forEach { (name, amount) -> line(String.format(Locale.US, "Other: %-14s Rs. +%.2f", name.take(14), amount)) }
+                line(String.format(Locale.US, "Other Charges Total: Rs. +%.2f", bill.otherCharges))
+            } else line(String.format(Locale.US, "Other Charges%s: Rs. +%.2f", if (bill.otherChargesRemark.isNotBlank()) " (${bill.otherChargesRemark})" else "", bill.otherCharges))
         }
-
-        if (bill.discount > 0) {
-            sb.append("${if (isGu) "વળતર" else "Discount"}: -${LanguageManager.formatCurrency(bill.discount)}\n")
-        }
-
-        if (bill.oldMetalExchangeAmount > 0) {
-            sb.append("${if (isGu) "જૂનું સોનું/ચાંદી જમા" else "Old Metal Exchange"}: -${LanguageManager.formatCurrency(bill.oldMetalExchangeAmount)}\n")
-        }
-        if (bill.otherCharges > 0) {
-            sb.append("Other Charges" + if (bill.otherChargesRemark.isNotBlank()) " (${bill.otherChargesRemark})" else "" + ": +" + LanguageManager.formatCurrency(bill.otherCharges) + "\n")
-        }
-
-        sb.append("━━━━━━━━━━━━━━━━━━━━\n")
-        sb.append("⭐ *${if (isGu) "કુલ રકમ" else "GRAND TOTAL"}: ${LanguageManager.formatCurrency(bill.grandTotal)}* ⭐\n")
-
+        line(String.format(Locale.US, "Grand Total: Rs. %.2f", bill.grandTotal))
         val payments = bill.getEffectivePayments()
         if (payments.isNotEmpty()) {
-            sb.append("━━━━━━━━━━━━━━━━━━━━\n")
-            sb.append(if (isGu) "*ચુકવણી વિગતો (PAYMENT DETAILS):*\n\n" else "*PAYMENT DETAILS:*\n\n")
+            line("--------------------------------")
+            line("PAYMENT DETAILS:")
             val isSale = bill.billType == "SALE"
-            for (p in payments) {
+            payments.forEach { p ->
                 when (p.paymentMode.uppercase()) {
                     "GOLD" -> {
-                        val label = if (isSale) (if (isGu) "🟡 સોનું મેળવ્યું (Gold Received):" else "🟡 Gold Received:") else (if (isGu) "🟡 સોનું ચૂકવ્યું (Gold Paid):" else "🟡 Gold Paid:")
-                        val breakdown = p.getFormattedBreakdown(isGu, isSale)
-                        sb.append("$label\n   $breakdown\n")
-                        if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
-                        sb.append("\n")
+                        line(if (isSale) "Gold Received:" else "Gold Paid:")
+                        val touch = if (p.metalTouch > 0) String.format(Locale.US, "%.1f%%", p.metalTouch) else "100%"
+                        if (!isSale) line(String.format(Locale.US, "  %.3fg . %s = %.3fg Fine", p.metalWeight, touch, p.calculatedFineWeight)) else line(String.format(Locale.US, "  %.3fg", p.metalWeight))
+                        if (p.metalRate > 0) line(String.format(Locale.US, "  x Price: Rs. %.0f/g", p.metalRate))
+                        line(String.format(Locale.US, "  = Rs. %.2f", p.amount))
+                        if (p.note.isNotBlank()) line("  (${p.note})")
                     }
                     "SILVER" -> {
-                        val label = if (isSale) (if (isGu) "⚪ ચાંદી મેળવ્યું (Silver Received):" else "⚪ Silver Received:") else (if (isGu) "⚪ ચાંદી ચૂકવ્યું (Silver Paid):" else "⚪ Silver Paid:")
-                        val breakdown = p.getFormattedBreakdown(isGu, isSale)
-                        sb.append("$label\n   $breakdown\n")
-                        if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
-                        sb.append("\n")
+                        line(if (isSale) "Silver Received:" else "Silver Paid:")
+                        val touch = if (p.metalTouch > 0) String.format(Locale.US, "%.1f%%", p.metalTouch) else "100%"
+                        line(String.format(Locale.US, "  %.3fg . %s = %.3fg Fine", p.metalWeight, touch, p.calculatedFineWeight))
+                        if (p.metalRate > 0) line(String.format(Locale.US, "  x Price: Rs. %.0f/kg", p.metalRate))
+                        line(String.format(Locale.US, "  = Rs. %.2f", p.amount))
+                        if (p.note.isNotBlank()) line("  (${p.note})")
                     }
-                    "ONLINE" -> {
-                        val label = if (isSale) (if (isGu) "💳 ઓનલાઇન મેળવ્યા (Online Received):" else "💳 Online Received:") else (if (isGu) "💳 ઓનલાઇન ચૂકવ્યા (Online Paid):" else "💳 Online Paid:")
-                        sb.append("$label\n   ${LanguageManager.formatCurrency(p.amount)}\n")
-                        if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
-                        sb.append("\n")
-                    }
-                    "CHEQUE" -> {
-                        val label = if (isSale) (if (isGu) "📝 ચેક મેળવ્યો (Cheque Received):" else "📝 Cheque Received:") else (if (isGu) "📝 ચેક ચૂકવ્યો (Cheque Paid):" else "📝 Cheque Paid:")
-                        sb.append("$label\n   ${LanguageManager.formatCurrency(p.amount)}\n")
-                        if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
-                        sb.append("\n")
-                    }
-                    else -> { // CASH
-                        val label = if (isSale) (if (isGu) "💵 રોકડ મેળવી (Cash Received):" else "💵 Cash Received:") else (if (isGu) "💵 રોકડ ચૂકવી (Cash Paid):" else "💵 Cash Paid:")
-                        sb.append("$label\n   ${LanguageManager.formatCurrency(p.amount)}\n")
-                        if (p.note.isNotBlank()) sb.append("   _${p.note}_\n")
-                        sb.append("\n")
-                    }
+                    "ONLINE" -> line(String.format(Locale.US, "%-17s Rs. %.2f", if (isSale) "Online Received:" else "Online Paid:", p.amount))
+                    "CHEQUE" -> line(String.format(Locale.US, "%-17s Rs. %.2f", if (isSale) "Cheque Received:" else "Cheque Paid:", p.amount))
+                    else -> line(String.format(Locale.US, "%-17s Rs. %.2f", if (isSale) "Cash Received:" else "Cash Paid:", p.amount))
                 }
             }
-            val totalPaid = payments.sumOf { it.amount }
-            val totalLabel = if (isSale) (if (isGu) "કુલ મેળવેલ (Total Received)" else "Total Received") else (if (isGu) "કુલ ચૂકવેલ (Total Paid)" else "Total Paid")
-            sb.append("$totalLabel:\n*${LanguageManager.formatCurrency(totalPaid)}*\n\n")
-            val balanceLabel = if (isGu) "બાકી રકમ (Balance)" else "Balance"
-            sb.append("$balanceLabel:\n*${LanguageManager.formatCurrency(bill.netBalanceDue)}*\n")
-        } else if (bill.netBalanceDue > 0) {
-            val balanceLabel = if (isGu) "બાકી રકમ (Balance)" else "Balance"
-            sb.append("$balanceLabel:\n*${LanguageManager.formatCurrency(bill.netBalanceDue)}*\n")
+            line("--------------------------------")
+            line(String.format(Locale.US, "%-17s Rs. %.2f", if (isSale) "TOTAL RECEIVED:" else "TOTAL PAID:", payments.sumOf { it.amount }))
         }
-
-        sb.append(if (isGu) "\n_આપની ખરીદી બદલ આભાર! ફરી પધારશો._\n" else "\n_Thank you for your business! Visit again._\n")
+        line(String.format(Locale.US, "%-17s Rs. %.2f", "BALANCE DUE:", bill.netBalanceDue))
+        line("--------------------------------")
+        line("Generated by Billing & Stock")
+        line("Shubh Muhurat")
         return sb.toString()
     }
 
