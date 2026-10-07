@@ -355,7 +355,7 @@ fun CreateBillScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = if (isGstBill) GoldLight.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surface
                     ),
-                    border = if (isGstBill || isCstBill) androidx.compose.foundation.BorderStroke(1.5.dp, GoldDark) else null
+                    border = if (isGstBill) androidx.compose.foundation.BorderStroke(1.5.dp, GoldDark) else null
                 ) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         // GST Toggle
