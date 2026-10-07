@@ -148,27 +148,106 @@ object BillShareHelper {
     fun shareBillText(context: Context, bill: Bill, settings: JewellerSettings?) {
         val text = generateFormattedBillText(bill, settings)
         val lines = text.trimEnd().split("\\n").flatMap { raw ->
-            if (raw.isEmpty()) listOf("") else wrapForShareImage(raw, 42)
+            if (raw.isEmpty()) listOf("") else wrapForShareImage(raw, 32)
         }
 
-        val width = 576
-        val horizontalPadding = 28f
+        // WhatsApp share is an image, not the on-screen preview. Use the same
+        // compact 32-column receipt proportion used by the thermal print layout,
+        // but render it at a mobile-friendly width so the complete bill is visible.
+        val width = 480
+        val horizontalPadding = 24f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.BLACK
-            textSize = 22f
+            textSize = 20f
             typeface = Typeface.MONOSPACE
         }
-        val lineHeight = 31f
-        val topBottom = 30f
-        val height = (topBottom * 2 + lineHeight * lines.size).toInt().coerceAtLeast(120)
+        val lineHeight = 29f
+        val topBottom = 28f
 
+        fun isSeparator(line: String): Boolean =
+            line.isNotEmpty() && line.all { it == '-' }
+
+        fun isCenteredLine(line: String): Boolean {
+            val upper = line.uppercase(Locale.US)
+            return line.length <= 30 && (
+                upper.contains("TAX INVOICE") ||
+                upper.contains("RETAIL INVOICE") ||
+                upper.contains("KARIGAR PURCHASE") ||
+                upper == "PAYMENT DETAILS:"
+            )
+        }
+
+        fun isRightAlignedLine(line: String): Boolean {
+            val upper = line.uppercase(Locale.US)
+            return upper.startsWith("SUBTOTAL:") ||
+                upper.startsWith("CGST ") ||
+                upper.startsWith("SGST ") ||
+                upper.startsWith("CST ") ||
+                upper.startsWith("DISCOUNT:") ||
+                upper.startsWith("OLD GOLD EXCH:") ||
+                upper.startsWith("OTHER CHARGES") ||
+                upper.startsWith("OTHER:") ||
+                upper.startsWith("GRAND TOTAL:") ||
+                upper.startsWith("TOTAL RECEIVED:") ||
+                upper.startsWith("TOTAL PAID:") ||
+                upper.startsWith("BALANCE DUE:")
+        }
+
+        val height = (topBottom * 2 + lineHeight * lines.size + 8f).toInt().coerceAtLeast(140)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(android.graphics.Color.WHITE)
 
-        var y = topBottom + 22f
+        var y = topBottom + 20f
         for (line in lines) {
-            canvas.drawText(line, horizontalPadding, y, paint)
+            val drawLine = line.take(32)
+
+            if (drawLine.isBlank()) {
+                y += lineHeight
+                continue
+            }
+
+            when {
+                isSeparator(drawLine) -> {
+                    paint.textSize = 18f
+                    paint.typeface = Typeface.MONOSPACE
+                    canvas.drawText("--------------------------------", horizontalPadding, y, paint)
+                }
+
+                isCenteredLine(drawLine) -> {
+                    paint.textSize = 20f
+                    paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                    val measured = paint.measureText(drawLine)
+                    canvas.drawText(drawLine, (width - measured) / 2f, y, paint)
+                }
+
+                drawLine.equals(shopNameForShare(settings), ignoreCase = false) -> {
+                    paint.textSize = 24f
+                    paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                    val measured = paint.measureText(drawLine)
+                    canvas.drawText(drawLine, (width - measured) / 2f, y, paint)
+                }
+
+                isRightAlignedLine(drawLine) -> {
+                    paint.textSize = 19f
+                    paint.typeface = if (drawLine.uppercase(Locale.US).contains("GRAND TOTAL") ||
+                        drawLine.uppercase(Locale.US).contains("BALANCE DUE") ||
+                        drawLine.uppercase(Locale.US).contains("TOTAL RECEIVED") ||
+                        drawLine.uppercase(Locale.US).contains("TOTAL PAID")) {
+                        Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                    } else {
+                        Typeface.MONOSPACE
+                    }
+                    val measured = paint.measureText(drawLine)
+                    canvas.drawText(drawLine, (width - horizontalPadding - measured).coerceAtLeast(horizontalPadding), y, paint)
+                }
+
+                else -> {
+                    paint.textSize = 19f
+                    paint.typeface = Typeface.MONOSPACE
+                    canvas.drawText(drawLine, horizontalPadding, y, paint)
+                }
+            }
             y += lineHeight
         }
 
@@ -200,6 +279,9 @@ object BillShareHelper {
             )
         )
     }
+
+    private fun shopNameForShare(settings: JewellerSettings?): String =
+        settings?.jewellerName?.ifBlank { "JEWELLERY SHOP" } ?: "JEWELLERY SHOP"
 
     private fun wrapForShareImage(text: String, maxChars: Int): List<String> {
         if (text.length <= maxChars) return listOf(text)
