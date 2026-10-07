@@ -22,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.content.ContextCompat
 import com.example.data.model.Bill
@@ -73,6 +76,8 @@ fun BillPreviewScreen(
     var showAddPaymentDialog by remember { mutableStateOf(false) }
     var editingPayment by remember { mutableStateOf<BillPayment?>(null) }
     var showSplitGoldCashDialog by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val billGraphicsLayer = rememberGraphicsLayer()
 
     // Bluetooth permission launcher
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
@@ -236,7 +241,10 @@ fun BillPreviewScreen(
                     IconButton(
                         onClick = {
                             if (bill != null) {
-                                BillShareHelper.shareBillText(context, bill, settings)
+                                coroutineScope.launch {
+                                    val bitmap = billGraphicsLayer.toImageBitmap().asAndroidBitmap()
+                                    BillShareHelper.shareBillImage(context, bill, bitmap)
+                                }
                             }
                         },
                         modifier = Modifier.testTag("share_bill_btn")
@@ -341,7 +349,13 @@ fun BillPreviewScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Color(0xFFD0D7DE), RoundedCornerShape(12.dp)),
+                        .border(1.dp, Color(0xFFD0D7DE), RoundedCornerShape(12.dp))
+                        .drawWithContent {
+                            billGraphicsLayer.record {
+                                this@drawWithContent.drawContent()
+                            }
+                            drawLayer(billGraphicsLayer)
+                        },
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
