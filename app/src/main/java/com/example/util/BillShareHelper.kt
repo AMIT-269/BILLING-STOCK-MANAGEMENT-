@@ -2,6 +2,14 @@ package com.example.util
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.net.Uri
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import com.example.data.model.Bill
 import com.example.data.model.JewellerSettings
 import com.example.ui.locale.LanguageManager
@@ -139,11 +147,71 @@ object BillShareHelper {
 
     fun shareBillText(context: Context, bill: Bill, settings: JewellerSettings?) {
         val text = generateFormattedBillText(bill, settings)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Jewellery Bill ${bill.billNumber}")
-            putExtra(Intent.EXTRA_TEXT, text)
+        val lines = text.trimEnd().split("\\n").flatMap { raw ->
+            if (raw.isEmpty()) listOf("") else wrapForShareImage(raw, 42)
         }
-        context.startActivity(Intent.createChooser(intent, if (LanguageManager.isGujarati()) "બિલ શેર કરો" else "Share Bill"))
+
+        val width = 576
+        val horizontalPadding = 28f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            textSize = 22f
+            typeface = Typeface.MONOSPACE
+        }
+        val lineHeight = 31f
+        val topBottom = 30f
+        val height = (topBottom * 2 + lineHeight * lines.size).toInt().coerceAtLeast(120)
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        var y = topBottom + 22f
+        for (line in lines) {
+            canvas.drawText(line, horizontalPadding, y, paint)
+            y += lineHeight
+        }
+
+        val shareDir = File(context.cacheDir, "shared_bills")
+        if (!shareDir.exists()) shareDir.mkdirs()
+        val safeBillNumber = bill.billNumber.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        val file = File(shareDir, "bill_$safeBillNumber.png")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        bitmap.recycle()
+
+        val uri: Uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "Jewellery Bill ${bill.billNumber}")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            Intent.createChooser(
+                intent,
+                if (LanguageManager.isGujarati()) "બિલ શેર કરો" else "Share Bill"
+            )
+        )
+    }
+
+    private fun wrapForShareImage(text: String, maxChars: Int): List<String> {
+        if (text.length <= maxChars) return listOf(text)
+        val result = mutableListOf<String>()
+        var remaining = text
+        while (remaining.length > maxChars) {
+            var cut = remaining.lastIndexOf(' ', maxChars)
+            if (cut <= 0) cut = maxChars
+            result.add(remaining.substring(0, cut))
+            remaining = remaining.substring(cut).trimStart()
+        }
+        result.add(remaining)
+        return result
     }
 }
