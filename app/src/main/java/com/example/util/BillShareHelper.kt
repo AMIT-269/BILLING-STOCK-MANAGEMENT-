@@ -8,11 +8,11 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import androidx.core.content.FileProvider
-import java.io.File
-import java.io.FileOutputStream
 import com.example.data.model.Bill
 import com.example.data.model.JewellerSettings
 import com.example.ui.locale.LanguageManager
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -80,7 +80,7 @@ object BillShareHelper {
                 line(String.format(Locale.US, "  Total Amount: Rs. %.2f", item.itemTotal))
             } else {
                 val purityTag = if (item.purity.isNotBlank()) " ${item.purity}" else ""
-                val namePurity = "${item.description}${purityTag}".take(14)
+                val namePurity = "${item.description}$purityTag".take(14)
                 val wt = String.format(Locale.US, "%.3f", if (item.netWeight > 0) item.netWeight else item.grossWeight)
                 val total = String.format(Locale.US, "%.2f", item.itemTotal)
                 line(String.format(Locale.US, "%-13s|%6s|%11s", namePurity, wt, total))
@@ -147,13 +147,12 @@ object BillShareHelper {
 
     fun shareBillText(context: Context, bill: Bill, settings: JewellerSettings?) {
         val text = generateFormattedBillText(bill, settings)
-        val lines = text.trimEnd().split("\\n").flatMap { raw ->
+        // Keep the exact generated bill line structure. This is critical so the
+        // shared PNG follows the same order/sections as the printable receipt.
+        val lines = text.trimEnd().split("\n").flatMap { raw ->
             if (raw.isEmpty()) listOf("") else wrapForShareImage(raw, 32)
         }
 
-        // WhatsApp share is an image, not the on-screen preview. Use the same
-        // compact 32-column receipt proportion used by the thermal print layout,
-        // but render it at a mobile-friendly width so the complete bill is visible.
         val width = 480
         val horizontalPadding = 24f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -213,35 +212,29 @@ object BillShareHelper {
                     paint.typeface = Typeface.MONOSPACE
                     canvas.drawText("--------------------------------", horizontalPadding, y, paint)
                 }
-
                 isCenteredLine(drawLine) -> {
                     paint.textSize = 20f
                     paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                     val measured = paint.measureText(drawLine)
                     canvas.drawText(drawLine, (width - measured) / 2f, y, paint)
                 }
-
                 drawLine.equals(shopNameForShare(settings), ignoreCase = false) -> {
                     paint.textSize = 24f
                     paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                     val measured = paint.measureText(drawLine)
                     canvas.drawText(drawLine, (width - measured) / 2f, y, paint)
                 }
-
                 isRightAlignedLine(drawLine) -> {
                     paint.textSize = 19f
-                    paint.typeface = if (drawLine.uppercase(Locale.US).contains("GRAND TOTAL") ||
+                    paint.typeface = if (
+                        drawLine.uppercase(Locale.US).contains("GRAND TOTAL") ||
                         drawLine.uppercase(Locale.US).contains("BALANCE DUE") ||
                         drawLine.uppercase(Locale.US).contains("TOTAL RECEIVED") ||
-                        drawLine.uppercase(Locale.US).contains("TOTAL PAID")) {
-                        Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-                    } else {
-                        Typeface.MONOSPACE
-                    }
+                        drawLine.uppercase(Locale.US).contains("TOTAL PAID")
+                    ) Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) else Typeface.MONOSPACE
                     val measured = paint.measureText(drawLine)
                     canvas.drawText(drawLine, (width - horizontalPadding - measured).coerceAtLeast(horizontalPadding), y, paint)
                 }
-
                 else -> {
                     paint.textSize = 19f
                     paint.typeface = Typeface.MONOSPACE
